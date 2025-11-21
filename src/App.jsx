@@ -8,6 +8,9 @@ import ScrollingCanvas from './components/ScrollingCanvas';
 import { renderScoreToCanvas } from './components/ScoreRenderer';
 import { initializeMidi } from './midi/MidiInput';
 import { exampleJSONLesson, exampleMusicXML, parseTimeline } from './parser/TimeLineParser';
+import LogDisplay from './components/LogDisplay';
+import LessonDisplay from './components/LessonDisplay';
+import { checkNoteAtPlayhead as checkNote } from './core/validation';
 
 // ---------------------- React App ----------------------
 export default function App() {
@@ -53,7 +56,11 @@ export default function App() {
         const cleanupMidi = initializeMidi({
             onNoteOn: (pitch, note) => {
                 setLog(l => [...l, `noteOn ${pitch} (${note})`]);
-                checkNoteAtPlayhead(pitch);
+                const validationResult = checkNote(pitch, timelineRef.current, scrollOffset, pixelsPerSecond);
+                setLog(l => [...l, validationResult.message]);
+                if (validationResult.color) {
+                    flashPlayhead(validationResult.color);
+                }
             },
             onNoteOff: (pitch, note) => {
                 setLog(l => [...l, `noteOff ${pitch} (${note})`]);
@@ -72,24 +79,6 @@ export default function App() {
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    function checkNoteAtPlayhead(pitch) {
-        const currentTime = scrollOffset / pixelsPerSecond;
-        const tolerance = 0.3; // seconds
-        const hits = timelineRef.current.filter(n => Math.abs(n.start - currentTime) <= tolerance);
-        if (hits.length === 0) {
-            setLog(l => [...l, `No expected note near t=${currentTime.toFixed(2)}s`]);
-            return;
-        }
-        const matched = hits.find(h => h.pitch === pitch);
-        if (matched) {
-            setLog(l => [...l, `✅ Correct: ${pitch} at t=${matched.start.toFixed(2)}s`]);
-            flashPlayhead('green');
-        } else {
-            setLog(l => [...l, `❌ Wrong: played ${pitch}, expected ${hits.map(h => h.pitch).join(',')}`]);
-            flashPlayhead('orange');
-        }
-    }
 
     function flashPlayhead(color) {
         setPlayheadFlash(color);
@@ -115,23 +104,8 @@ export default function App() {
                 <strong>MIDI supported:</strong> {midiSupported ? 'Yes' : 'No or not yet initialized'}
             </div>
 
-            <div style={{ marginTop: 10 }}>
-                <details>
-                    <summary>Example lesson (JSON)</summary>
-                    <pre style={{ maxHeight: 200, overflow: 'auto' }}>{JSON.stringify(exampleJSONLesson, null, 2)}</pre>
-                </details>
-                <details>
-                    <summary>Example lesson (MusicXML)</summary>
-                    <pre style={{ maxHeight: 200, overflow: 'auto' }}>{exampleMusicXML}</pre>
-                </details>
-            </div>
-
-            <div style={{ marginTop: 10 }}>
-                <h4>Log</h4>
-                <div style={{ maxHeight: 200, overflow: 'auto', background: '#fafafa', padding: 8 }}>
-                    {log.map((l, i) => <div key={i}><code>{l}</code></div>)}
-                </div>
-            </div>
+            <LessonDisplay jsonLesson={exampleJSONLesson} musicXmlLesson={exampleMusicXML} />
+            <LogDisplay log={log} />
 
             <div style={{ marginTop: 12 }}>
                 <h4>Next steps (suggested)</h4>
