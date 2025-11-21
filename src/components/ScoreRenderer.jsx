@@ -10,34 +10,48 @@ function pitchToMidi(pitch) {
     return (octave + 1) * 12 + map[step];
 }
 
-export async function renderScoreToCanvas(offscreenCanvas, timeline, opts = {}) {
-    const width = offscreenCanvas.width;
-    const height = offscreenCanvas.height;
+export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline, opts = {}) {
+    const { viewportWidth, viewportHeight } = opts;
 
-    // --- Create direct VexFlow renderer (safe for offscreen canvases) ---
-    const renderer = new Renderer(offscreenCanvas, Renderer.Backends.CANVAS);
-    const ctx = renderer.getContext();
+    // --- Render static staves ---
+    stavesCanvas.width = viewportWidth;
+    stavesCanvas.height = viewportHeight;
+    const stavesRenderer = new Renderer(stavesCanvas, Renderer.Backends.CANVAS);
+    const stavesCtx = stavesRenderer.getContext();
+    stavesCtx.clearRect(0, 0, stavesCanvas.width, stavesCanvas.height);
 
-    // Clear previous drawing
-    ctx.clearRect(0, 0, width, height);
-
-    // --- Basic layout ---
     const marginLeft = 20;
-    const staveWidth = width - marginLeft - 20;
-
+    const staveWidth = stavesCanvas.width - marginLeft;
     const trebleY = 20;
     const bassY = 120;
 
-    // --- Draw staves manually ---
     const trebleStave = new Stave(marginLeft, trebleY, staveWidth);
     trebleStave.addClef("treble").addTimeSignature("4/4");
-    trebleStave.setContext(ctx).draw();
+    trebleStave.setContext(stavesCtx).draw();
 
     const bassStave = new Stave(marginLeft, bassY, staveWidth);
     bassStave.addClef("bass").addTimeSignature("4/4");
-    bassStave.setContext(ctx).draw();
+    bassStave.setContext(stavesCtx).draw();
 
-    // --- Split notes by register ---
+    stavesCtx.beginPath();
+    stavesCtx.strokeStyle = "#000";
+    stavesCtx.lineWidth = 2;
+    stavesCtx.moveTo(marginLeft - 10, trebleY);
+    stavesCtx.lineTo(marginLeft - 10, bassY + 60);
+    stavesCtx.stroke();
+
+    // --- Render scrolling notes ---
+    const notesWidth = Math.max(2400, (timeline[timeline.length - 1]?.start + 5) * 120);
+    notesCanvas.width = notesWidth;
+    notesCanvas.height = viewportHeight;
+    const notesRenderer = new Renderer(notesCanvas, Renderer.Backends.CANVAS);
+    const notesCtx = notesRenderer.getContext();
+    notesCtx.clearRect(0, 0, notesCanvas.width, notesCanvas.height);
+
+    const notesStaveWidth = notesCanvas.width - marginLeft - 20;
+    const notesTrebleStave = new Stave(marginLeft, trebleY, notesStaveWidth);
+    const notesBassStave = new Stave(marginLeft, bassY, notesStaveWidth);
+
     const trebleNotes = [];
     const bassNotes = [];
 
@@ -47,7 +61,6 @@ export async function renderScoreToCanvas(offscreenCanvas, timeline, opts = {}) 
         else bassNotes.push(item);
     }
 
-    // --- Convert note objects to VexFlow StaveNotes ---
     function makeVexNotes(items) {
         return items.map(n => {
             const m = n.pitch.match(/^([A-G]#?)(-?\d+)$/);
@@ -65,22 +78,12 @@ export async function renderScoreToCanvas(offscreenCanvas, timeline, opts = {}) 
     const trebleVexNotes = makeVexNotes(trebleNotes);
     const bassVexNotes = makeVexNotes(bassNotes);
 
-    // --- Create voices ---
     const trebleVoice = new Voice({ num_beats: 4, beat_value: 4 });
     trebleVoice.addTickables(trebleVexNotes);
 
     const bassVoice = new Voice({ num_beats: 4, beat_value: 4 });
     bassVoice.addTickables(bassVexNotes);
 
-    // --- Format voices on their respective staves ---
-    Formatter.FormatAndDraw(ctx, trebleStave, trebleVexNotes);
-    Formatter.FormatAndDraw(ctx, bassStave, bassVexNotes);
-
-    // --- (Optional) Connect staves with a brace/line ---
-    ctx.beginPath();
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
-    ctx.moveTo(marginLeft - 10, trebleY);
-    ctx.lineTo(marginLeft - 10, bassY + 60);
-    ctx.stroke();
+    Formatter.FormatAndDraw(notesCtx, notesTrebleStave, trebleVexNotes);
+    Formatter.FormatAndDraw(notesCtx, notesBassStave, bassVexNotes);
 }
