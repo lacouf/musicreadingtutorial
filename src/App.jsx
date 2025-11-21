@@ -21,7 +21,7 @@ export default function App() {
     const [log, setLog] = useState([]);
     const [scrollOffset, setScrollOffset] = useState(0);
     const [playheadFlash, setPlayheadFlash] = useState(null);
-    const [paused, setPaused] = useState(false);
+    const [paused, setPaused] = useState(true); // Start in paused state
 
     const animationFrameId = useRef(null);
     const lastFrameTimeRef = useRef(0);
@@ -70,9 +70,19 @@ export default function App() {
             }
         });
 
+        const handleKeyDown = (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault(); // Prevent default spacebar action (like scrolling)
+                togglePause();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+
         return () => {
             cancelAnimationFrame(animationFrameId.current);
             cleanupMidi();
+            window.removeEventListener('keydown', handleKeyDown);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
