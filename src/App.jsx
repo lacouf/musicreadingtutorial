@@ -20,6 +20,11 @@ export default function App() {
     const [log, setLog] = useState([]);
     const [scrollOffset, setScrollOffset] = useState(0);
     const [playheadFlash, setPlayheadFlash] = useState(null);
+    const [paused, setPaused] = useState(false); // State for pause functionality
+
+    const animationFrameId = useRef(null); // Ref to store requestAnimationFrame ID
+    const lastFrameTimeRef = useRef(0); // Timestamp of the last animation frame
+    const totalActiveTimeRef = useRef(0); // Total time the animation has been running (excluding pauses)
 
     const playheadX = 300; // px fixed position of playhead
     const viewportWidth = 800;
@@ -44,18 +49,10 @@ export default function App() {
             .then(() => setLog(l => [...l, 'Rendered offscreen score']))
             .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
 
-        let rafId;
-        const startTime = performance.now();
-        function loop(ts) {
-            const elapsed = (ts - startTime) / 1000;
-            setScrollOffset(elapsed * pixelsPerSecond);
-            rafId = requestAnimationFrame(loop);
-        }
-        rafId = requestAnimationFrame(loop);
-
         const cleanupMidi = initializeMidi({
             onNoteOn: (pitch, note) => {
                 setLog(l => [...l, `noteOn ${pitch} (${note})`]);
+                // Use the current scrollOffset for validation
                 const validationResult = checkNote(pitch, timelineRef.current, scrollOffset, pixelsPerSecond);
                 setLog(l => [...l, validationResult.message]);
                 if (validationResult.color) {
@@ -74,16 +71,48 @@ export default function App() {
         });
 
         return () => {
-            cancelAnimationFrame(rafId);
+            cancelAnimationFrame(animationFrameId.current);
             cleanupMidi();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Animation loop for scrolling
+    useEffect(() => {
+        if (paused) {
+            cancelAnimationFrame(animationFrameId.current);
+            lastFrameTimeRef.current = 0; // Reset last frame time when paused
+            return;
+        }
+
+        const animate = (timestamp) => {
+            if (!lastFrameTimeRef.current) {
+                lastFrameTimeRef.current = timestamp;
+            }
+
+            const deltaTime = (timestamp - lastFrameTimeRef.current) / 1000; // seconds since last frame
+            totalActiveTimeRef.current += deltaTime; // Accumulate active time
+            lastFrameTimeRef.current = timestamp; // Update last frame time
+
+            setScrollOffset(totalActiveTimeRef.current * pixelsPerSecond);
+            animationFrameId.current = requestAnimationFrame(animate);
+        };
+
+        animationFrameId.current = requestAnimationFrame(animate);
+
+        return () => {
+            cancelAnimationFrame(animationFrameId.current);
+        };
+    }, [paused, pixelsPerSecond]); // Only depends on paused and pixelsPerSecond
+
     function flashPlayhead(color) {
         setPlayheadFlash(color);
         setTimeout(() => setPlayheadFlash(null), 120);
     }
+
+    const togglePause = () => {
+        setPaused(prevPaused => !prevPaused);
+    };
 
     return (
         <div style={{ fontFamily: 'sans-serif', padding: 12 }}>
@@ -103,6 +132,10 @@ export default function App() {
             <div style={{ marginTop: 8 }}>
                 <strong>MIDI supported:</strong> {midiSupported ? 'Yes' : 'No or not yet initialized'}
             </div>
+
+            <button onClick={togglePause} style={{ marginTop: 10, padding: '8px 16px', cursor: 'pointer' }}>
+                {paused ? 'Resume Scrolling' : 'Pause Scrolling'}
+            </button>
 
             <LessonDisplay jsonLesson={exampleJSONLesson} musicXmlLesson={exampleMusicXML} />
             <LogDisplay log={log} />
