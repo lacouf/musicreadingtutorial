@@ -42,6 +42,7 @@ Architecture (ASCII diagram):
 import React, { useEffect, useRef, useState } from 'react';
 import ScrollingCanvas from './components/ScrollingCanvas';
 import { renderScoreToCanvas } from './components/ScoreRenderer';
+import { initializeMidi } from './midi/MidiInput';
 
 
 // ---------------------- Example lessons ----------------------
@@ -108,13 +109,6 @@ const exampleMusicXML = `<?xml version="1.0" encoding="UTF-8"?>
 </score-partwise>`;
 
 // ---------------------- Utility functions ----------------------
-function midiToPitch(midi) {
-    const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const octave = Math.floor(midi / 12) - 1;
-    const name = names[midi % 12];
-    return `${name}${octave}`;
-}
-
 function simpleMusicXMLtoTimeline(xmlString, tempo = 60) {
     // Very small parser: extracts note pitch and duration (in beats) and generates start times in seconds.
     const parser = new DOMParser();
@@ -180,45 +174,28 @@ export default function App() {
         }
         rafId = requestAnimationFrame(loop);
 
-        initMIDI();
+        const cleanupMidi = initializeMidi({
+            onNoteOn: (pitch, note) => {
+                setLog(l => [...l, `noteOn ${pitch} (${note})`]);
+                checkNoteAtPlayhead(pitch);
+            },
+            onNoteOff: (pitch, note) => {
+                setLog(l => [...l, `noteOff ${pitch} (${note})`]);
+            },
+            onLog: (message) => {
+                setLog(l => [...l, message]);
+            },
+            onReady: (isReady) => {
+                setMidiSupported(isReady);
+            }
+        });
 
         return () => {
             cancelAnimationFrame(rafId);
+            cleanupMidi();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    function initMIDI() {
-        if (!navigator.requestMIDIAccess) {
-            setLog(l => [...l, 'Web MIDI not supported']);
-            return;
-        }
-        navigator.requestMIDIAccess().then(midi => {
-            setMidiSupported(true);
-            setLog(l => [...l, 'MIDI ready']);
-            for (let input of midi.inputs.values()) {
-                input.onmidimessage = onMIDIMessage;
-            }
-            midi.onstatechange = e => {
-                setLog(l => [...l, `MIDI device ${e.port.name} ${e.port.state}`]);
-            };
-        }).catch(err => {
-            setLog(l => [...l, 'MIDI error: ' + err.message]);
-        });
-    }
-
-    function onMIDIMessage(msg) {
-        const [status, note, velocity] = msg.data;
-        const kind = status & 0xf0;
-        if (kind === 144 && velocity > 0) {
-            const pitch = midiToPitch(note);
-            setLog(l => [...l, `noteOn ${pitch} (${note})`]);
-            checkNoteAtPlayhead(pitch);
-        } else if (kind === 128 || (kind === 144 && velocity === 0)) {
-            const pitch = midiToPitch(note);
-            setLog(l => [...l, `noteOff ${pitch} (${note})`]);
-        }
-    }
 
     function checkNoteAtPlayhead(pitch) {
         const currentTime = scrollOffset / pixelsPerSecond;
