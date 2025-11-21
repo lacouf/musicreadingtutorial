@@ -1,11 +1,8 @@
 // src/components/ScrollingCanvas.jsx
 import React, { useEffect, useRef } from 'react';
 
-export default function ScrollingCanvas({ offscreenCanvas, viewportWidth, viewportHeight, playheadX, pixelsPerSecond }) {
+export default function ScrollingCanvas({ offscreenCanvas, viewportWidth, viewportHeight, scrollOffset, playheadX, playheadFlash }) {
     const canvasRef = useRef(null);
-    const rafRef = useRef(null);
-    const scrollOffsetRef = useRef(0);
-    const startTimeRef = useRef(null);
 
     useEffect(() => {
         const vis = canvasRef.current;
@@ -13,37 +10,19 @@ export default function ScrollingCanvas({ offscreenCanvas, viewportWidth, viewpo
         vis.width = viewportWidth;
         vis.height = viewportHeight;
 
-        startTimeRef.current = performance.now();
-        scrollOffsetRef.current = 0;
+        const ctx = vis.getContext('2d');
+        ctx.clearRect(0, 0, vis.width, vis.height);
 
-        function loop(ts) {
-            if (!startTimeRef.current) startTimeRef.current = ts;
-            const elapsed = (ts - startTimeRef.current) / 1000;
-            scrollOffsetRef.current = elapsed * pixelsPerSecond;
-            drawFrame();
-            rafRef.current = requestAnimationFrame(loop);
-        }
-
-        function drawFrame() {
-            if (!vis || !offscreenCanvas) return;
-            const ctx = vis.getContext('2d');
-            ctx.clearRect(0, 0, vis.width, vis.height);
-
-            // Draw the scrolling portion of the offscreen canvas
-            const sx = Math.floor(scrollOffsetRef.current);
+        if (offscreenCanvas) {
+            const sx = Math.floor(scrollOffset);
             ctx.drawImage(offscreenCanvas, sx, 0, vis.width, vis.height, 0, 0, vis.width, vis.height);
-
-            // Draw playhead
-            ctx.fillStyle = 'rgba(255,0,0,0.9)';
-            ctx.fillRect(playheadX - 1, 0, 2, vis.height);
         }
 
-        rafRef.current = requestAnimationFrame(loop);
+        // Draw playhead
+        ctx.fillStyle = playheadFlash || 'rgba(255,0,0,0.9)';
+        ctx.fillRect(playheadX - 1, 0, 2, vis.height);
 
-        return () => {
-            cancelAnimationFrame(rafRef.current);
-        };
-    }, [offscreenCanvas, viewportWidth, viewportHeight, pixelsPerSecond, playheadX]);
+    }, [offscreenCanvas, viewportWidth, viewportHeight, scrollOffset, playheadX, playheadFlash]);
 
     return <canvas ref={canvasRef} style={{ display: 'block' }} />;
 }

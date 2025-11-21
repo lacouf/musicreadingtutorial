@@ -143,68 +143,51 @@ function simpleMusicXMLtoTimeline(xmlString, tempo = 60) {
 
 // ---------------------- React App ----------------------
 export default function App() {
-    const visibleCanvasRef = useRef(null);
     const offscreenRef = useRef(null);
-    const rafRef = useRef(null);
     const [midiSupported, setMidiSupported] = useState(false);
     const timelineRef = useRef([]);
     const [log, setLog] = useState([]);
-    const playheadX = 300; // px fixed position of playhead
+    const [scrollOffset, setScrollOffset] = useState(0);
+    const [playheadFlash, setPlayheadFlash] = useState(null);
 
-    // viewport config
+    const playheadX = 300; // px fixed position of playhead
     const viewportWidth = 800;
     const viewportHeight = 220;
-    const pixelsPerSecond = 120; // scroll speed (px per second) — adjust with tempo
-    const startTimeRef = useRef(null);
-    const scrollOffsetRef = useRef(0);
+    const pixelsPerSecond = 120;
 
     useEffect(() => {
-        // initialize offscreen canvas
         const off = document.createElement('canvas');
-        off.width = 2400; // entire score width
+        off.width = 2400;
         off.height = viewportHeight;
         offscreenRef.current = off;
 
-        // parse timeline from JSON example (or MusicXML)
-        // For demo we combine both: JSON overrides if available
         const useJson = true;
-        let timeline = [];
-        if (useJson) {
-            timeline = exampleJSONLesson.notes.map(n => ({ start: n.start, dur: n.dur, pitch: n.pitch }));
-        } else {
-            timeline = simpleMusicXMLtoTimeline(exampleMusicXML, 80);
-        }
+        const timeline = useJson
+            ? exampleJSONLesson.notes.map(n => ({ start: n.start, dur: n.dur, pitch: n.pitch }))
+            : simpleMusicXMLtoTimeline(exampleMusicXML, 80);
         timelineRef.current = timeline;
 
-        // render to offscreen
         renderScoreToCanvas(off, timeline)
             .then(() => setLog(l => [...l, 'Rendered offscreen score']))
             .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
 
-
-        // start animation
-        startTimeRef.current = performance.now();
-        scrollOffsetRef.current = 0;
+        let rafId;
+        const startTime = performance.now();
         function loop(ts) {
-            if (!startTimeRef.current) startTimeRef.current = ts;
-            const elapsed = (ts - startTimeRef.current) / 1000; // seconds since start
-            scrollOffsetRef.current = elapsed * pixelsPerSecond;
-            rafRef.current = requestAnimationFrame(loop);
+            const elapsed = (ts - startTime) / 1000;
+            setScrollOffset(elapsed * pixelsPerSecond);
+            rafId = requestAnimationFrame(loop);
         }
-        rafRef.current = requestAnimationFrame(loop);
+        rafId = requestAnimationFrame(loop);
 
-        // start MIDI
         initMIDI();
 
         return () => {
-            cancelAnimationFrame(rafRef.current);
+            cancelAnimationFrame(rafId);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-
-
-    // ---------------- MIDI ----------------
     function initMIDI() {
         if (!navigator.requestMIDIAccess) {
             setLog(l => [...l, 'Web MIDI not supported']);
@@ -228,29 +211,23 @@ export default function App() {
         const [status, note, velocity] = msg.data;
         const kind = status & 0xf0;
         if (kind === 144 && velocity > 0) {
-            // note on
             const pitch = midiToPitch(note);
             setLog(l => [...l, `noteOn ${pitch} (${note})`]);
             checkNoteAtPlayhead(pitch);
         } else if (kind === 128 || (kind === 144 && velocity === 0)) {
-            // note off
             const pitch = midiToPitch(note);
             setLog(l => [...l, `noteOff ${pitch} (${note})`]);
         }
     }
 
     function checkNoteAtPlayhead(pitch) {
-        // Find timeline note whose expected start time corresponds to playhead position
-        // Compute current time from scrollOffset
-        const currentTime = scrollOffsetRef.current / pixelsPerSecond;
-        // The playhead corresponds to time slightly ahead of viewport center. For simplicity, we find a note which start is within a tolerance
+        const currentTime = scrollOffset / pixelsPerSecond;
         const tolerance = 0.3; // seconds
         const hits = timelineRef.current.filter(n => Math.abs(n.start - currentTime) <= tolerance);
         if (hits.length === 0) {
             setLog(l => [...l, `No expected note near t=${currentTime.toFixed(2)}s`]);
             return;
         }
-        // If any hit matches pitch, success
         const matched = hits.find(h => h.pitch === pitch);
         if (matched) {
             setLog(l => [...l, `✅ Correct: ${pitch} at t=${matched.start.toFixed(2)}s`]);
@@ -262,16 +239,10 @@ export default function App() {
     }
 
     function flashPlayhead(color) {
-        const vis = visibleCanvasRef.current;
-        if (!vis) return;
-        const ctx = vis.getContext('2d');
-        const prev = ctx.fillStyle;
-        ctx.fillStyle = color;
-        ctx.fillRect(playheadX - 2, 0, 4, vis.height);
-        setTimeout(() => drawFrame(), 120);
+        setPlayheadFlash(color);
+        setTimeout(() => setPlayheadFlash(null), 120);
     }
 
-    // ---------------- UI ----------------
     return (
         <div style={{ fontFamily: 'sans-serif', padding: 12 }}>
             <h2>Music Tutorial — Minimal Starter</h2>
@@ -281,8 +252,9 @@ export default function App() {
                     offscreenCanvas={offscreenRef.current}
                     viewportWidth={viewportWidth}
                     viewportHeight={viewportHeight}
+                    scrollOffset={scrollOffset}
                     playheadX={playheadX}
-                    pixelsPerSecond={pixelsPerSecond}
+                    playheadFlash={playheadFlash}
                 />
             </div>
 
