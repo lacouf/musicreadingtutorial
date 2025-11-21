@@ -41,6 +41,8 @@ Architecture (ASCII diagram):
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Factory, Renderer, Stave, StaveNote, Voice, Formatter } from 'vexflow';
+import ScrollingCanvas from './components/ScrollingCanvas';
+
 
 // ---------------------- Example lessons ----------------------
 const exampleJSONLesson = {
@@ -267,10 +269,6 @@ export default function App() {
             .then(() => setLog(l => [...l, 'Rendered offscreen score']))
             .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
 
-        // set up visible canvas size
-        const vis = visibleCanvasRef.current;
-        vis.width = viewportWidth;
-        vis.height = viewportHeight;
 
         // start animation
         startTimeRef.current = performance.now();
@@ -279,7 +277,6 @@ export default function App() {
             if (!startTimeRef.current) startTimeRef.current = ts;
             const elapsed = (ts - startTimeRef.current) / 1000; // seconds since start
             scrollOffsetRef.current = elapsed * pixelsPerSecond;
-            drawFrame();
             rafRef.current = requestAnimationFrame(loop);
         }
         rafRef.current = requestAnimationFrame(loop);
@@ -293,28 +290,7 @@ export default function App() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    function drawFrame() {
-        const vis = visibleCanvasRef.current;
-        const off = offscreenRef.current;
-        if (!vis || !off) return;
-        const ctx = vis.getContext('2d');
-        ctx.clearRect(0, 0, vis.width, vis.height);
 
-        // draw portion of offscreen canvas according to scroll offset
-        const sx = Math.floor(scrollOffsetRef.current);
-        ctx.drawImage(off, sx, 0, vis.width, vis.height, 0, 0, vis.width, vis.height);
-
-        // draw playhead
-        ctx.fillStyle = 'rgba(255,0,0,0.9)';
-        ctx.fillRect(playheadX - 1, 0, 2, vis.height);
-
-        // draw upcoming notes timeline (simple)
-        // determine current time
-        const currentTime = scrollOffsetRef.current / pixelsPerSecond;
-        ctx.font = '12px sans-serif';
-        ctx.fillStyle = 'black';
-        ctx.fillText(`t=${currentTime.toFixed(2)}s`, 10, vis.height - 6);
-    }
 
     // ---------------- MIDI ----------------
     function initMIDI() {
@@ -389,8 +365,15 @@ export default function App() {
             <h2>Music Tutorial — Minimal Starter</h2>
             <p>Open this page in Chrome. Connect a MIDI keyboard (USB). The score scrolls left; play notes at the red playhead.</p>
             <div style={{ border: '1px solid #ccc', width: viewportWidth, height: viewportHeight, overflow: 'hidden' }}>
-                <canvas ref={visibleCanvasRef} style={{ display: 'block' }} />
+                <ScrollingCanvas
+                    offscreenCanvas={offscreenRef.current}
+                    viewportWidth={viewportWidth}
+                    viewportHeight={viewportHeight}
+                    playheadX={playheadX}
+                    pixelsPerSecond={pixelsPerSecond}
+                />
             </div>
+
             <div style={{ marginTop: 8 }}>
                 <strong>MIDI supported:</strong> {midiSupported ? 'Yes' : 'No or not yet initialized'}
             </div>
