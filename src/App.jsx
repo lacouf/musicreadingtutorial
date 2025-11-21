@@ -1,139 +1,13 @@
 /*
 Music Tutorial - Minimal React Skeleton
 File: music-tutorial-starter.jsx
-
-Instructions:
-1) Create a new React app (Vite recommended):
-   npm create vite@latest my-music-app -- --template react
-   cd my-music-app
-   npm install
-   npm install vexflow
-
-2) Replace src/App.jsx with this file. Start dev server: npm run dev
-
-What this file contains:
-- Minimal React single-file app
-- Offscreen VexFlow rendering of grand staff (treble + bass)
-- Scrolling viewport drawn to visible canvas using requestAnimationFrame
-- Web MIDI listener (works in Chrome) to receive noteOn/noteOff
-- Timeline parser for a simple JSON lesson format and a tiny MusicXML parser
-- Example lesson in JSON and MusicXML (strings)
-- Simple matching logic: when a MIDI note is played near the playhead time, mark correct
-
-Notes / caveats:
-- This is a minimal, educational skeleton — many production details omitted (robust MusicXML support, note durations mapping, quantization, device selection UI, error handling, styling, bundling assets, polyfills for older browsers).
-- VexFlow rendering is approximated (we draw measures/notes using VexFlow on an offscreen canvas). For complex scores use MusicXML to VexFlow full mapping.
-
-Architecture (ASCII diagram):
-
-  [Lesson Source] -> [Parser (JSON|MusicXML)] -> [Score Timeline]
-                                            |          |
-                                            v          v
-                                  [Offscreen Renderer]  [MIDI Input (Web MIDI)]
-                                            |          |
-                                            v          v
-                                  [Scrolling Viewport Canvas] <-- [Playhead + UI]
-                                            |
-                                            v
-                                   [Validation / Feedback Engine]
-
 */
 
 import React, { useEffect, useRef, useState } from 'react';
 import ScrollingCanvas from './components/ScrollingCanvas';
 import { renderScoreToCanvas } from './components/ScoreRenderer';
 import { initializeMidi } from './midi/MidiInput';
-
-
-// ---------------------- Example lessons ----------------------
-const exampleJSONLesson = {
-    title: 'Simple C Major Exercise',
-    tempo: 80,
-    notes: [
-        // start (s), duration (s), pitch in scientific pitch (e.g., C4), hand
-        { start: 0.0, dur: 0.5, pitch: 'C4' },
-        { start: 0.5, dur: 0.5, pitch: 'D4' },
-        { start: 1.0, dur: 1.0, pitch: 'E4' },
-        { start: 2.0, dur: 1.0, pitch: 'G3' },
-        { start: 3.0, dur: 1.0, pitch: 'C4' }
-    ]
-};
-
-const exampleMusicXML = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
-<score-partwise version="3.1">
-  <part-list>
-    <score-part id="P1">
-      <part-name>Music</part-name>
-    </score-part>
-  </part-list>
-  <part id="P1">
-    <measure number="1">
-      <attributes>
-        <divisions>1</divisions>
-        <key>
-          <fifths>0</fifths>
-        </key>
-        <time>
-          <beats>4</beats>
-          <beat-type>4</beat-type>
-        </time>
-        <clef>
-          <sign>G</sign>
-          <line>2</line>
-        </clef>
-      </attributes>
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>1</duration>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>1</duration>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>2</duration>
-      </note>
-    </measure>
-  </part>
-</score-partwise>`;
-
-// ---------------------- Utility functions ----------------------
-function simpleMusicXMLtoTimeline(xmlString, tempo = 60) {
-    // Very small parser: extracts note pitch and duration (in beats) and generates start times in seconds.
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xmlString, 'application/xml');
-    const notes = Array.from(doc.querySelectorAll('note'))
-        .filter(n => !n.querySelector('rest'))
-        .map(n => {
-            const step = n.querySelector('pitch > step')?.textContent || 'C';
-            const alter = n.querySelector('pitch > alter')?.textContent || null;
-            const octave = n.querySelector('pitch > octave')?.textContent || '4';
-            const dur = parseFloat(n.querySelector('duration')?.textContent || '1');
-            const stepName = alter ? `${step}#` : step;
-            return { pitch: `${stepName}${octave}`, dur }; // dur is in divisions/beats (approx)
-        });
-
-    // convert to seconds assuming divisions=1 and tempo (bpm) -> seconds per beat
-    const secPerBeat = 60.0 / tempo;
-    let t = 0;
-    const timeline = notes.map(n => {
-        const item = { start: t, dur: n.dur * secPerBeat, pitch: n.pitch };
-        t += n.dur * secPerBeat;
-        return item;
-    });
-    return timeline;
-}
+import { exampleJSONLesson, exampleMusicXML, parseTimeline } from './parser/TimeLineParser';
 
 // ---------------------- React App ----------------------
 export default function App() {
@@ -156,9 +30,11 @@ export default function App() {
         offscreenRef.current = off;
 
         const useJson = true;
-        const timeline = useJson
-            ? exampleJSONLesson.notes.map(n => ({ start: n.start, dur: n.dur, pitch: n.pitch }))
-            : simpleMusicXMLtoTimeline(exampleMusicXML, 80);
+        const timeline = parseTimeline(
+            useJson ? 'json' : 'musicxml',
+            useJson ? exampleJSONLesson : exampleMusicXML,
+            exampleJSONLesson.tempo
+        );
         timelineRef.current = timeline;
 
         renderScoreToCanvas(off, timeline)
