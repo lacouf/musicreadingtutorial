@@ -1,5 +1,5 @@
 // javascript
-// File: `src/App.jsx` (updated sections only — replace the original file with this)
+// File: `src/App.jsx`
 import React, { useEffect, useRef, useState } from 'react';
 import ScrollingCanvas from './components/ScrollingCanvas';
 import { renderScoreToCanvases } from './components/ScoreRenderer';
@@ -8,6 +8,7 @@ import { exampleJSONLesson, exampleMusicXML, parseTimeline } from './parser/Time
 import LogDisplay from './components/LogDisplay';
 import LessonDisplay from './components/LessonDisplay';
 import { checkNoteAtPlayhead as checkNote } from './core/validation';
+import { audioSynth } from './audio/AudioSynth';
 
 export default function App() {
     const stavesRef = useRef(null);
@@ -110,6 +111,9 @@ export default function App() {
 
         const cleanupMidi = initializeMidi({
             onNoteOn: (pitch, note) => {
+                // Play audio tone
+                audioSynth.playNote(note);
+
                 // numeric `note` is the MIDI note number from the device
                 setLog(l => [...l, `noteOn ${pitch} (${note})`]);
 
@@ -138,6 +142,9 @@ export default function App() {
                 }
             },
             onNoteOff: (pitch, note) => {
+                // Stop audio tone
+                audioSynth.stopNote(note);
+
                 setLog(l => [...l, `noteOff ${pitch} (${note})`]);
             },
             onLog: (message) => {
@@ -285,6 +292,20 @@ export default function App() {
                         style={{ marginLeft: 8, verticalAlign: 'middle' }}
                     />
                     <span style={{ marginLeft: 8 }}>{tempoFactor.toFixed(1)}x</span>
+                </label>
+
+                {/* volume control */}
+                <label style={{ marginLeft: 12 }}>
+                    Volume:
+                    <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        defaultValue="0.3"
+                        onChange={(e) => audioSynth.setVolume(Number(e.target.value))}
+                        style={{ marginLeft: 8, verticalAlign: 'middle' }}
+                    />
                 </label>
             </div>
 
