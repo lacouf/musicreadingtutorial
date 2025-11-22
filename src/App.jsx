@@ -29,6 +29,14 @@ export default function App() {
     const totalActiveTimeRef = useRef(0);
     const scrollOffsetRef = useRef(0);
 
+    // Track recently validated notes to support polyphony
+    // Map: timeline event index -> timestamp when it was last validated
+    const validatedNotesRef = useRef(new Map());
+
+    // De-duplication: track recent MIDI events to prevent duplicate processing
+    // Map: MIDI note number -> timestamp of last event
+    const recentMidiEventsRef = useRef(new Map());
+
     const playheadX = 300;
     const viewportWidth = 800;
     const viewportHeight = 220;
@@ -100,41 +108,82 @@ export default function App() {
         // find all timeline events within a time window, sorted by distance
         function findEventsInWindow(timeSec, windowSec = 0.45) {
             const out = [];
-            for (const ev of timelineRef.current) {
+            for (let i = 0; i < timelineRef.current.length; i++) {
+                const ev = timelineRef.current[i];
                 const t = ev.start || 0;
                 const d = Math.abs(t - timeSec);
-                if (d <= windowSec) out.push({ ev, d });
+                if (d <= windowSec) out.push({ ev, d, index: i });
             }
             out.sort((a, b) => a.d - b.d);
             return out;
         }
 
+        // Clean up old validated notes (older than 2 seconds)
+        function cleanupValidatedNotes(currentTime) {
+            const expiryTime = 2000; // 2 seconds in ms
+            for (const [index, timestamp] of validatedNotesRef.current.entries()) {
+                if (currentTime - timestamp > expiryTime) {
+                    validatedNotesRef.current.delete(index);
+                }
+            }
+        }
+
         const cleanupMidi = initializeMidi({
             onNoteOn: (pitch, note) => {
+                const now = performance.now();
+
+                // De-duplication: ignore duplicate MIDI events within 50ms
+                const lastEventTime = recentMidiEventsRef.current.get(note);
+                if (lastEventTime && (now - lastEventTime) < 50) {
+                    // This is a duplicate event, ignore it
+                    return;
+                }
+                recentMidiEventsRef.current.set(note, now);
+
                 // Play audio tone
                 audioSynth.playNote(note);
 
                 // numeric `note` is the MIDI note number from the device
                 setLog(l => [...l, `noteOn ${pitch} (${note})`]);
-
                 const playTime = scrollOffsetRef.current / pixelsPerSecond;
                 const windowSec = 0.45;
 
-                const candidates = findEventsInWindow(playTime, windowSec);
+                // Clean up old validated notes
+                cleanupValidatedNotes(now);
+
+                // Find all expected notes in the time window
+                const allCandidates = findEventsInWindow(playTime, windowSec);
+
+                // Filter out recently validated notes (supports polyphony)
+                const revalidationWindow = 500; // ms - allow same note to be validated again after this time
+                const candidates = allCandidates.filter(c => {
+                    const lastValidated = validatedNotesRef.current.get(c.index);
+                    return !lastValidated || (now - lastValidated) > revalidationWindow;
+                });
+
                 if (candidates.length === 0) {
-                    setLog(l => [...l, `No expected note near t=${playTime.toFixed(2)}s`]);
+                    if (allCandidates.length > 0) {
+                        setLog(l => [...l, `Note already played recently`]);
+                    } else {
+                        setLog(l => [...l, `No expected note near t=${playTime.toFixed(2)}s`]);
+                    }
                     const validationResult = checkNote(note, timelineRef.current, scrollOffsetRef.current, pixelsPerSecond);
                     setLog(l => [...l, validationResult.message]);
                     if (validationResult.color) flashPlayhead(validationResult.color);
                     return;
                 }
 
+                // Look for exact pitch match among available candidates
                 const exact = candidates.find(c => Number.isInteger(c.ev.midi) && c.ev.midi === note);
                 if (exact) {
+                    // Mark this note as validated
+                    validatedNotesRef.current.set(exact.index, now);
+
                     const key = exact.ev.vfKey || exact.ev.pitch || `midi:${exact.ev.midi}`;
                     setLog(l => [...l, `✅ Correct: played ${note} matched ${key} dt=${exact.d.toFixed(2)}s`]);
                     flashPlayhead('green');
                 } else {
+                    // No exact match - show what was expected
                     const nearest = candidates[0];
                     const expectedKey = nearest.ev.vfKey || nearest.ev.pitch || `midi:${nearest.ev.midi}`;
                     setLog(l => [...l, `❌ Wrong: played ${note}, expected ${expectedKey} (midi=${nearest.ev.midi}) dt=${nearest.d.toFixed(2)}s`]);
@@ -217,7 +266,15 @@ export default function App() {
     }
 
     const togglePause = () => {
-        setPaused(prev => !prev);
+        setPaused(prev => {
+            // Clear validated notes when pausing/resuming to avoid stale state
+            if (!prev) {
+                // About to pause - clear validated notes and MIDI deduplication
+                validatedNotesRef.current.clear();
+                recentMidiEventsRef.current.clear();
+            }
+            return !prev;
+        });
     };
 
     // overlay sizing for the pulse visual

@@ -1,15 +1,45 @@
 // src/parser/TimeLineParser.js
 
 export const exampleJSONLesson = {
-    title: 'Simple C Major Exercise',
+    title: 'Polyphonic Exercise with Chords',
     tempo: 80,
     notes: [
-        // start (s), duration (s), pitch in scientific pitch (e.g., C4), hand
+        // === Section 1: Single notes (warm up) ===
         { start: 0.0, dur: 0.5, pitch: 'C4' },
         { start: 0.5, dur: 0.5, pitch: 'D4' },
-        { start: 1.0, dur: 1.0, pitch: 'E4' },
-        { start: 2.0, dur: 1.0, pitch: 'G3' },
-        { start: 3.0, dur: 1.0, pitch: 'C4' }
+        { start: 1.0, dur: 0.5, pitch: 'E4' },
+
+        // === Section 2: Two-note intervals (thirds) ===
+        // C-E interval at 2.0s
+        { start: 2.0, dur: 1.0, pitch: 'C4' },
+        { start: 2.0, dur: 1.0, pitch: 'E4' },
+
+        // D-F interval at 3.5s
+        { start: 3.5, dur: 1.0, pitch: 'D4' },
+        { start: 3.5, dur: 1.0, pitch: 'F4' },
+
+        // === Section 3: Three-note chord (C major triad) ===
+        // C-E-G chord at 5.0s
+        { start: 5.0, dur: 1.5, pitch: 'C4' },
+        { start: 5.0, dur: 1.5, pitch: 'E4' },
+        { start: 5.0, dur: 1.5, pitch: 'G4' },
+
+        // === Section 4: Bass + Treble (polyphonic melody) ===
+        // Bass note with treble melody
+        { start: 7.0, dur: 2.0, pitch: 'C3' },  // Bass holds
+        { start: 7.0, dur: 0.5, pitch: 'E4' },  // Treble melody
+        { start: 7.5, dur: 0.5, pitch: 'G4' },
+        { start: 8.0, dur: 0.5, pitch: 'C5' },
+
+        // === Section 5: Another triad (G major) ===
+        { start: 9.5, dur: 1.5, pitch: 'G3' },
+        { start: 9.5, dur: 1.5, pitch: 'B3' },
+        { start: 9.5, dur: 1.5, pitch: 'D4' },
+
+        // === Section 6: Final chord (F major) ===
+        { start: 11.5, dur: 2.0, pitch: 'F3' },
+        { start: 11.5, dur: 2.0, pitch: 'A3' },
+        { start: 11.5, dur: 2.0, pitch: 'C4' }
     ]
 };
 
