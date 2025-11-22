@@ -1,5 +1,5 @@
 // javascript
-// File: `src/App.jsx`
+// File: `src/App.jsx` (updated sections only — replace the original file with this)
 import React, { useEffect, useRef, useState } from 'react';
 import ScrollingCanvas from './components/ScrollingCanvas';
 import { renderScoreToCanvases } from './components/ScoreRenderer';
@@ -18,6 +18,10 @@ export default function App() {
     const [scrollOffset, setScrollOffset] = useState(0);
     const [playheadFlash, setPlayheadFlash] = useState(null);
     const [paused, setPaused] = useState(true);
+
+    // pulse state for expanded visual feedback
+    const [pulseActive, setPulseActive] = useState(false);
+    const [pulseColor, setPulseColor] = useState('red');
 
     const animationFrameId = useRef(null);
     const lastFrameTimeRef = useRef(0);
@@ -92,7 +96,6 @@ export default function App() {
             .then(() => setLog(l => [...l, 'Rendered offscreen score']))
             .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
 
-        // helper: find nearest timeline event by start time (within window)
         // find all timeline events within a time window, sorted by distance
         function findEventsInWindow(timeSec, windowSec = 0.45) {
             const out = [];
@@ -105,7 +108,6 @@ export default function App() {
             return out;
         }
 
-        // --- MIDI callback change: use numeric `note` for validation and extra debug logging ---
         const cleanupMidi = initializeMidi({
             onNoteOn: (pitch, note) => {
                 // numeric `note` is the MIDI note number from the device
@@ -117,28 +119,24 @@ export default function App() {
                 const candidates = findEventsInWindow(playTime, windowSec);
                 if (candidates.length === 0) {
                     setLog(l => [...l, `No expected note near t=${playTime.toFixed(2)}s`]);
-                    // keep existing validation fallback
                     const validationResult = checkNote(note, timelineRef.current, scrollOffsetRef.current, pixelsPerSecond);
                     setLog(l => [...l, validationResult.message]);
                     if (validationResult.color) flashPlayhead(validationResult.color);
                     return;
                 }
 
-                // prefer an exact MIDI match among candidates
                 const exact = candidates.find(c => Number.isInteger(c.ev.midi) && c.ev.midi === note);
                 if (exact) {
                     const key = exact.ev.vfKey || exact.ev.pitch || `midi:${exact.ev.midi}`;
                     setLog(l => [...l, `✅ Correct: played ${note} matched ${key} dt=${exact.d.toFixed(2)}s`]);
                     flashPlayhead('green');
                 } else {
-                    // no exact pitch match in window — report nearest candidate
                     const nearest = candidates[0];
                     const expectedKey = nearest.ev.vfKey || nearest.ev.pitch || `midi:${nearest.ev.midi}`;
                     setLog(l => [...l, `❌ Wrong: played ${note}, expected ${expectedKey} (midi=${nearest.ev.midi}) dt=${nearest.d.toFixed(2)}s`]);
                     flashPlayhead('red');
                 }
 
-                // keep original validation call for compatibility/visuals
                 const validationResult = checkNote(note, timelineRef.current, scrollOffsetRef.current, pixelsPerSecond);
                 setLog(l => [...l, validationResult.message]);
                 if (validationResult.color) flashPlayhead(validationResult.color);
@@ -201,20 +199,34 @@ export default function App() {
         };
     }, [paused, pixelsPerSecond, tempoFactor]); // include tempoFactor so changes apply immediately
 
+    // improved flash: also trigger a brief expanding pulse overlay for better visual feedback
     function flashPlayhead(color) {
+        // existing small color flash (kept for compatibility)
         setPlayheadFlash(color);
-        setTimeout(() => setPlayheadFlash(null), 120);
+        // pulse overlay
+        setPulseColor(color || 'red');
+        setPulseActive(true);
+        // clear both states after short time
+        window.setTimeout(() => {
+            setPlayheadFlash(null);
+            setPulseActive(false);
+        }, 220);
     }
 
     const togglePause = () => {
         setPaused(prev => !prev);
     };
 
+    // overlay sizing for the pulse visual
+    const overlayWidth = 120;
+    const circleSize = 18;
+
     return (
         <div style={{ fontFamily: 'sans-serif', padding: 12 }}>
             <h2>Music Tutorial — Minimal Starter</h2>
             <p>Open this page in Chrome. Connect a MIDI keyboard (USB). The score scrolls left; play notes at the red playhead.</p>
-            <div style={{ border: '1px solid #ccc', width: viewportWidth, height: viewportHeight, overflow: 'hidden' }}>
+
+            <div style={{ border: '1px solid #ccc', width: viewportWidth, height: viewportHeight, overflow: 'hidden', position: 'relative' }}>
                 <ScrollingCanvas
                     stavesCanvas={stavesRef.current}
                     notesCanvas={notesRef.current}
@@ -224,6 +236,35 @@ export default function App() {
                     playheadX={playheadX}
                     playheadFlash={playheadFlash}
                 />
+
+                {/* pulse overlay centered on the playhead - purely visual (pointer-events: none) */}
+                <div
+                    aria-hidden
+                    style={{
+                        position: 'absolute',
+                        left: Math.max(0, playheadX - overlayWidth / 2),
+                        top: 0,
+                        width: overlayWidth,
+                        height: viewportHeight,
+                        pointerEvents: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}
+                >
+                    <div
+                        style={{
+                            width: circleSize,
+                            height: circleSize,
+                            borderRadius: '50%',
+                            background: pulseActive ? pulseColor : 'transparent',
+                            transform: pulseActive ? 'scale(2.6)' : 'scale(1)',
+                            opacity: pulseActive ? 0.85 : 0,
+                            transition: 'transform 200ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease-out',
+                            boxShadow: pulseActive ? `0 0 24px ${pulseColor}` : 'none'
+                        }}
+                    />
+                </div>
             </div>
 
             <div style={{ marginTop: 8 }}>
