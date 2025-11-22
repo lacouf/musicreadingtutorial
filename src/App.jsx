@@ -136,10 +136,6 @@ export default function App() {
                     setLog(l => [...l, `❌ Wrong: played ${note}, expected ${expectedKey} (midi=${nearest.ev.midi}) dt=${nearest.d.toFixed(2)}s`]);
                     flashPlayhead('red');
                 }
-
-                const validationResult = checkNote(note, timelineRef.current, scrollOffsetRef.current, pixelsPerSecond);
-                setLog(l => [...l, validationResult.message]);
-                if (validationResult.color) flashPlayhead(validationResult.color);
             },
             onNoteOff: (pitch, note) => {
                 setLog(l => [...l, `noteOff ${pitch} (${note})`]);
