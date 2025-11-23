@@ -19,6 +19,7 @@ export default function App() {
     const [scrollOffset, setScrollOffset] = useState(0);
     const [playheadFlash, setPlayheadFlash] = useState(null);
     const [paused, setPaused] = useState(true);
+    const pausedRef = useRef(true); // Track paused state in ref for synchronous access
 
     // pulse state for expanded visual feedback
     const [pulseActive, setPulseActive] = useState(false);
@@ -145,6 +146,13 @@ export default function App() {
 
                 // numeric `note` is the MIDI note number from the device
                 setLog(l => [...l, `noteOn ${pitch} (${note})`]);
+
+                // Don't validate notes when paused
+                if (pausedRef.current) {
+                    return; // Skip validation entirely when paused
+                }
+
+                // Only validate when not paused
                 const playTime = scrollOffsetRef.current / pixelsPerSecond;
                 const windowSec = 0.45;
 
@@ -167,10 +175,7 @@ export default function App() {
                     } else {
                         setLog(l => [...l, `No expected note near t=${playTime.toFixed(2)}s`]);
                     }
-                    const validationResult = checkNote(note, timelineRef.current, scrollOffsetRef.current, pixelsPerSecond);
-                    setLog(l => [...l, validationResult.message]);
-                    if (validationResult.color) flashPlayhead(validationResult.color);
-                    return;
+                    return; // Exit early, don't validate further
                 }
 
                 // Look for exact pitch match among available candidates
@@ -267,14 +272,35 @@ export default function App() {
 
     const togglePause = () => {
         setPaused(prev => {
-            // Clear validated notes when pausing/resuming to avoid stale state
-            if (!prev) {
+            const newPaused = !prev;
+            pausedRef.current = newPaused; // Keep ref in sync
+
+            // Clear validated notes when pausing to avoid stale state
+            if (newPaused) {
                 // About to pause - clear validated notes and MIDI deduplication
                 validatedNotesRef.current.clear();
                 recentMidiEventsRef.current.clear();
             }
-            return !prev;
+            return newPaused;
         });
+    };
+
+    const restart = () => {
+        // Reset to beginning
+        totalActiveTimeRef.current = 0;
+        scrollOffsetRef.current = 0;
+        setScrollOffset(0);
+        lastFrameTimeRef.current = 0;
+
+        // Clear all tracking
+        validatedNotesRef.current.clear();
+        recentMidiEventsRef.current.clear();
+
+        // Pause on restart
+        setPaused(true);
+        pausedRef.current = true; // Keep ref in sync
+
+        setLog(l => [...l, '🔄 Restarted']);
     };
 
     // overlay sizing for the pulse visual
@@ -334,6 +360,10 @@ export default function App() {
             <div style={{ marginTop: 10 }}>
                 <button onClick={togglePause} style={{ padding: '8px 16px', cursor: 'pointer' }}>
                     {paused ? 'Resume Scrolling' : 'Pause Scrolling'}
+                </button>
+
+                <button onClick={restart} style={{ padding: '8px 16px', cursor: 'pointer', marginLeft: 8 }}>
+                    Restart
                 </button>
 
                 {/* simple tempo control: increase tempoFactor to slow playback */}
