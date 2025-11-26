@@ -3,16 +3,20 @@
 import { Renderer, Stave, StaveNote, TickContext } from 'vexflow';
 
 function pitchToMidi(pitch) {
-    const match = pitch.match(/^([A-G]#?)(-?\d+)$/);
-    if (!match) return null;
-    const step = match[1];
-    const octave = parseInt(match[2], 10);
+    if (!pitch || typeof pitch !== 'string') return null;
+    const s = pitch.replace('/', '').toUpperCase();
+    const m = s.match(/^([A-G])(#?)(-?\d+)$/);
+    if (!m) return null;
+    const step = m[1] + (m[2] || '');
+    const octave = parseInt(m[3], 10);
     const map = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
-    return (octave + 1) * 12 + map[step];
+    const off = map[step];
+    if (off === undefined) return null;
+    return (octave + 1) * 12 + off;
 }
 
 export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline = [], opts = {}) {
-    const { viewportWidth = 800, viewportHeight = 220, pixelsPerSecond = 120, playheadX = 300 } = opts;
+    const { viewportWidth = 800, viewportHeight = 220, pixelsPerSecond = 120, playheadX = 300, minMidi = 0, maxMidi = 127 } = opts;
 
     // --- Static staves on the staves canvas (unchanging) ---
     stavesCanvas.width = viewportWidth;
@@ -41,10 +45,16 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     stavesCtx.lineTo(marginLeft - 10, bassY + 60);
     stavesCtx.stroke();
 
+    // --- Filter timeline to the requested midi range ---
+    const filteredTimeline = timeline.filter(ev => {
+        const midi = (Number.isInteger(ev.midi) ? ev.midi : pitchToMidi(ev.pitch || ev.key || ''));
+        if (midi == null) return false; // drop events without a resolvable midi
+        return midi >= (Number.isFinite(minMidi) ? minMidi : 0) && midi <= (Number.isFinite(maxMidi) ? maxMidi : 127);
+    });
+
     // --- Notes canvas: size to timeline duration and draw notes at absolute X positions ---
-    const lastTime = timeline.length ? Math.max(...timeline.map(t => (t.start || 0) + (t.dur || 0))) : 0;
-    const notesWidth = Math.max(2400, Math.ceil(lastTime * pixelsPerSecond) + marginLeft + 40);
-    notesCanvas.width = notesWidth;
+    const lastTime = filteredTimeline.length ? Math.max(...filteredTimeline.map(t => (t.start || 0) + (t.dur || 0))) : 0;
+    notesCanvas.width = Math.max(2400, Math.ceil(lastTime * pixelsPerSecond) + marginLeft + 40);
     notesCanvas.height = viewportHeight;
 
     const notesRenderer = new Renderer(notesCanvas, Renderer.Backends.CANVAS);
@@ -60,19 +70,19 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     // compute initial lead so start===0 appears at playheadX
     const initialLeadPixels = Math.max(0, playheadX - marginLeft);
 
-    // split timeline into treble/bass
+    // split timeline into treble/bass using midi (prefer ev.midi when present)
     const trebleItems = [];
     const bassItems = [];
-    for (const ev of timeline) {
-        const midi = pitchToMidi(ev.pitch || ev.key || '');
-        if (midi >= 60 || midi === null) trebleItems.push(ev);
+    for (const ev of filteredTimeline) {
+        const midi = Number.isInteger(ev.midi) ? ev.midi : pitchToMidi(ev.pitch || ev.key || '');
+        if (midi >= 60) trebleItems.push(ev);
         else bassItems.push(ev);
     }
 
     function makeVexNoteFrom(ev) {
         const raw = (ev.pitch || ev.key || '').toString().trim();
         // Accept formats like: "C4", "C/4", "c4", "c/4", "C#4", "c#/4"
-        const m = raw.match(/^([A-Ga-g]#?)[\/]?(-?\d+)$/);
+        const m = raw.match(/^([A-Ga-g]#?)\/?(-?\d+)$/);
         const step = m ? m[1].toLowerCase() : 'c';
         const oct = m ? m[2] : '4';
         const dur = (ev.dur || ev.duration || 0) >= 1.5 ? "h" : "q";

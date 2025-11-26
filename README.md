@@ -212,3 +212,83 @@ __tests__/timeMapper.test.js
   ---
 Overall verdict: This is a solid plan! My main advice is to start smaller (manual JSON, simple durations) before tackling MusicXML parsing and complex beaming. The phased approach is right, but
 Phase A could be split further.
+
+**ANALYSIS TO CONVERT TO SOURCE OF TRUTH FOR TIMING**
+
+Based on my analysis, here's a comprehensive plan for changing the duration mapping to Measure/beat as canonical while keeping timeSec for where it's needed:
+
+Plan: Refactor Duration Mapping to Measure/Beat as Canonical
+
+Phase 1: Extend Data Structures
+
+1. Update timeline entry format to include measure/beat information:
+   {
+   measure: 1,           // 1-indexed measure number
+   beat: 1,              // 1-indexed beat within measure
+   beatFraction: 0,      // 0-1 (for sixteenth notes, triplets, etc.)
+   durationBeats: 1.0,   // Duration in beats (float for dotted notes)
+   timeSec: 0.0,         // Computed from measure/beat + tempo (cached)
+   pitch: 'C4',
+   midi: 60
+   }
+2. Add time signature support to lesson structure:
+   {
+   title: string,
+   tempo: number,
+   timeSignature: { numerator: 4, denominator: 4 },  // Default 4/4
+   notes: TimelineEntry[]
+   }
+
+Phase 2: Parser Updates (TimeLineParser.js)
+
+1. Extract measure/beat from MusicXML instead of just converting to seconds
+2. Parse time signatures from <attributes> in MusicXML
+3. Compute timeSec from measure/beat using formula:
+   timeSec = (measure - 1) * beatsPerMeasure * 60/BPM + (beat - 1 + beatFraction) * 60/BPM
+4. Handle duration encoding: Map beat durations → durationBeats (not arbitrary time thresholds)
+
+Phase 3: Rendering Updates (ScoreRenderer.jsx)
+
+1. Replace time-based duration logic with beat-based logic:
+   // OLD: dur >= 1.5 ? "h" : "q"
+   // NEW: durationBeats >= 2.0 ? "h" : "q"
+2. Use beat-aligned positioning: pixelsPerBeat = pixelsPerSecond * 60 / BPM
+3. Keep timeSec for actual positioning (no change to pixel calculations)
+
+Phase 4: Validation Updates (validation.js & App.jsx)
+
+1. Replace time-based tolerance with beat-based:
+   // OLD: tolerance = 0.3 seconds
+   // NEW: toleranceSec = 0.5 * 60 / BPM (0.5 beats)
+2. Update findEventsInWindow() to work with measure/beat when displaying feedback
+3. Keep timeSec for internal playback logic (scrollOffset calculations)
+
+Phase 5: Playback & Animation (No changes needed)
+
+- scrollOffset and pixelsPerSecond continue working as-is
+- tempoFactor adjustment continues to work
+- Only the interpretation of what notes mean changes
+
+Phase 6: UI/Display Enhancements (Optional but recommended)
+
+1. Add measure/beat display at top of canvas
+2. Show validation feedback as "Beat X.Y" instead of "X seconds"
+3. Display measure lines for visual guidance
+
+  ---
+Benefits of This Approach
+
+✅ Measure/beat becomes the source of truth for musical meaning✅ timeSec remains as cached computed value for fast rendering/playback✅ Backward compatible scrolling - no changes to pixel
+animation✅ Better validation feedback - users see "You're late by 0.3 beats" not "You're late by 0.225 seconds"✅ Extensible for future features - tempo maps, time signature changes, dotted notes,
+tuplets
+
+  ---
+Implementation Order (by impact & dependencies)
+
+1. Phase 1 (data structure) - Foundation for everything else
+2. Phase 2 (parser) - Generate new data correctly
+3. Phase 3 (rendering) - Use measure/beat for decisions
+4. Phase 4 (validation) - Make feedback beat-aware
+5. Phase 5 (playback) - Verify nothing broke
+6. Phase 6 (UI) - Polish and user experience
+

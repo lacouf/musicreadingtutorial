@@ -46,6 +46,11 @@ export default function App() {
     // tempoFactor: 1 = original speed; >1 slows playback (notes take longer to reach playhead)
     const [tempoFactor, setTempoFactor] = useState(1.6);
 
+    // new: min/max note inputs (user-facing strings like 'C4')
+    const [minNote, setMinNote] = useState('C3');
+    const [maxNote, setMaxNote] = useState('C6');
+
+    // helper: parse a pitch like C4 -> midi number (reuse parsePitchToMidi below)
     function parsePitchToMidi(pitchStr) {
         if (typeof pitchStr === 'number' && Number.isFinite(pitchStr)) return pitchStr;
         if (!pitchStr || typeof pitchStr !== 'string') return null;
@@ -102,7 +107,10 @@ export default function App() {
         setLog(l => [...l, 'Timeline mapped: ' + normalizedTimeline.map(e => `${(e.start||0).toFixed(2)}s -> ${e.midi ?? '??'} (${e.vfKey ?? '??'})`).join(', ')]);
 
         // render offscreen canvases
-        renderScoreToCanvases(stavesRef.current, notesRef.current, normalizedTimeline, { viewportWidth, viewportHeight, pixelsPerSecond, playheadX })
+        // initial render uses current min/max note settings
+        const minMidi = parsePitchToMidi(minNote) ?? 0;
+        const maxMidi = parsePitchToMidi(maxNote) ?? 127;
+        renderScoreToCanvases(stavesRef.current, notesRef.current, normalizedTimeline, { viewportWidth, viewportHeight, pixelsPerSecond, playheadX, minMidi, maxMidi })
             .then(() => setLog(l => [...l, 'Rendered offscreen score']))
             .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
 
@@ -224,6 +232,16 @@ export default function App() {
             window.removeEventListener('keydown', handleKeyDown);
         };
     }, []); // initial setup only
+
+    // Re-render when min/max note inputs change or when timeline changes
+    useEffect(() => {
+        if (!stavesRef.current || !notesRef.current || !timelineRef.current) return;
+        const minMidi = parsePitchToMidi(minNote) ?? 0;
+        const maxMidi = parsePitchToMidi(maxNote) ?? 127;
+        renderScoreToCanvases(stavesRef.current, notesRef.current, timelineRef.current, { viewportWidth, viewportHeight, pixelsPerSecond, playheadX, minMidi, maxMidi })
+            .then(() => setLog(l => [...l, `Rendered with range ${minNote} (${minMidi}) -> ${maxNote} (${maxMidi})`]))
+            .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
+    }, [minNote, maxNote]);
 
     useEffect(() => {
         if (paused) {
@@ -358,6 +376,16 @@ export default function App() {
             </div>
 
             <div style={{ marginTop: 10 }}>
+                <label style={{ marginLeft: 12 }}>
+                    Min note:
+                    <input style={{ marginLeft: 8 }} value={minNote} onChange={(e) => setMinNote(e.target.value)} />
+                </label>
+
+                <label style={{ marginLeft: 12 }}>
+                    Max note:
+                    <input style={{ marginLeft: 8 }} value={maxNote} onChange={(e) => setMaxNote(e.target.value)} />
+                </label>
+
                 <button onClick={togglePause} style={{ padding: '8px 16px', cursor: 'pointer' }}>
                     {paused ? 'Resume Scrolling' : 'Pause Scrolling'}
                 </button>
