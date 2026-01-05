@@ -8,6 +8,8 @@ import { exampleJSONLesson, exampleMusicXML, parseTimeline } from './parser/Time
 import LogDisplay from './components/LogDisplay';
 import LessonDisplay from './components/LessonDisplay';
 import { audioSynth } from './audio/AudioSynth';
+import { parsePitchToMidi, midiToVexKey, STRICT_WINDOW_SECONDS } from './core/musicUtils';
+import { generateRandomTimeline } from './core/NoteGenerator';
 
 const PIXELS_PER_SECOND = 120;
 const DEFAULT_TEMPO = 1.6;
@@ -24,6 +26,7 @@ export default function App() {
     const initialScroll = (-LEAD_IN_SECONDS * PIXELS_PER_SECOND) / DEFAULT_TEMPO;
     
     const [scrollOffset, setScrollOffset] = useState(initialScroll);
+    const [renderTrigger, setRenderTrigger] = useState(0); // Forces canvas repaint
     const [playheadFlash, setPlayheadFlash] = useState(null);
     const [paused, setPaused] = useState(true);
     const pausedRef = useRef(true); // Track paused state in ref for synchronous access
@@ -53,44 +56,25 @@ export default function App() {
     // tempoFactor: 1 = original speed; >1 slows playback (notes take longer to reach playhead)
     const [tempoFactor, setTempoFactor] = useState(DEFAULT_TEMPO);
 
-    // new: min/max note inputs (user-facing strings like 'C4')
     const [minNote, setMinNote] = useState('C3');
     const [maxNote, setMaxNote] = useState('C6');
+    const [includeSharps, setIncludeSharps] = useState(true);
+    const [showValidTiming, setShowValidTiming] = useState(true);
 
-    // helper: parse a pitch like C4 -> midi number (reuse parsePitchToMidi below)
-    function parsePitchToMidi(pitchStr) {
-        if (typeof pitchStr === 'number' && Number.isFinite(pitchStr)) return pitchStr;
-        if (!pitchStr || typeof pitchStr !== 'string') return null;
-        const s = pitchStr.replace('/', '').toUpperCase();
-        const m = s.match(/^([A-G])(#?)(-?\d+)$/);
-        if (!m) return null;
-        const step = m[1] + (m[2] || '');
-        const octave = parseInt(m[3], 10);
-        const map = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
-        const off = map[step];
-        if (off === undefined) return null;
-        return (octave + 1) * 12 + off;
-    }
+    const [mode, setMode] = useState('lesson'); // 'lesson' or 'practice'
 
-    function midiToVexKey(midi) {
-        if (!Number.isInteger(midi)) return null;
-        const names = ['c','c#','d','d#','e','f','f#','g','g#','a','a#','b'];
-        const name = names[midi % 12];
-        const octave = Math.floor(midi / 12) - 1;
-        return `${name}/${octave}`;
-    }
-
-    useEffect(() => {
-        stavesRef.current = document.createElement('canvas');
-        notesRef.current = document.createElement('canvas');
-
-        const useJson = true;
-
-        const rawTimeline = parseTimeline(
-            useJson ? 'json' : 'musicxml',
-            useJson ? exampleJSONLesson : exampleMusicXML,
-            exampleJSONLesson.tempo
-        );
+    const loadTimeline = (currentMode, currentMin, currentMax, currentIncludeSharps, currentShowValidTiming) => {
+        let rawTimeline;
+        if (currentMode === 'lesson') {
+            const useJson = true;
+            rawTimeline = parseTimeline(
+                useJson ? 'json' : 'musicxml',
+                useJson ? exampleJSONLesson : exampleMusicXML,
+                exampleJSONLesson.tempo
+            );
+        } else {
+            rawTimeline = generateRandomTimeline(currentMin, currentMax, 20, 80, currentIncludeSharps);
+        }
 
         // normalize and annotate timeline events with midi and a canonical VexFlow key
         const normalizedTimeline = rawTimeline.map(ev => {
@@ -110,16 +94,30 @@ export default function App() {
 
         timelineRef.current = normalizedTimeline;
 
-        // debug: log mapping so you can check expected midi numbers
-        setLog(l => [...l, 'Timeline mapped: ' + normalizedTimeline.map(e => `${(e.start||0).toFixed(2)}s -> ${e.midi ?? '??'} (${e.vfKey ?? '??'})`).join(', ')]);
-
         // render offscreen canvases
-        // initial render uses current min/max note settings
-        const minMidi = parsePitchToMidi(minNote) ?? 0;
-        const maxMidi = parsePitchToMidi(maxNote) ?? 127;
-        renderScoreToCanvases(stavesRef.current, notesRef.current, normalizedTimeline, { viewportWidth, viewportHeight, pixelsPerSecond: PIXELS_PER_SECOND, playheadX, minMidi, maxMidi })
-            .then(() => setLog(l => [...l, 'Rendered offscreen score']))
+        const minMidi = parsePitchToMidi(currentMin) ?? 0;
+        const maxMidi = parsePitchToMidi(currentMax) ?? 127;
+        renderScoreToCanvases(stavesRef.current, notesRef.current, normalizedTimeline, { 
+            viewportWidth, 
+            viewportHeight, 
+            pixelsPerSecond: PIXELS_PER_SECOND, 
+            playheadX, 
+            minMidi, 
+            maxMidi,
+            showValidTiming: currentShowValidTiming
+        })
+            .then(() => {
+                setLog(l => [...l, `Rendered ${currentMode} mode score`]);
+                setRenderTrigger(t => t + 1);
+            })
             .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
+    };
+
+    useEffect(() => {
+        stavesRef.current = document.createElement('canvas');
+        notesRef.current = document.createElement('canvas');
+
+        loadTimeline(mode, minNote, maxNote, includeSharps, showValidTiming);
 
         // find all timeline events within a time window, sorted by distance
         function findEventsInWindow(timeSec, windowSec = 0.45) {
@@ -170,7 +168,7 @@ export default function App() {
                 // Only validate when not paused
                 const playTime = scrollOffsetRef.current / PIXELS_PER_SECOND;
                 const windowSec = 0.5; // wider window to detect misses/timing errors
-                const strictWindowSec = 0.15; // strict window for success
+                const strictWindowSec = STRICT_WINDOW_SECONDS; // strict window for success
 
                 // Clean up old validated notes
                 cleanupValidatedNotes(now);
@@ -250,12 +248,8 @@ export default function App() {
     // Re-render when min/max note inputs change or when timeline changes
     useEffect(() => {
         if (!stavesRef.current || !notesRef.current || !timelineRef.current) return;
-        const minMidi = parsePitchToMidi(minNote) ?? 0;
-        const maxMidi = parsePitchToMidi(maxNote) ?? 127;
-        renderScoreToCanvases(stavesRef.current, notesRef.current, timelineRef.current, { viewportWidth, viewportHeight, pixelsPerSecond: PIXELS_PER_SECOND, playheadX, minMidi, maxMidi })
-            .then(() => setLog(l => [...l, `Rendered with range ${minNote} (${minMidi}) -> ${maxNote} (${maxMidi})`]))
-            .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
-    }, [minNote, maxNote]);
+        loadTimeline(mode, minNote, maxNote, includeSharps, showValidTiming);
+    }, [minNote, maxNote, mode, includeSharps, showValidTiming]);
 
     useEffect(() => {
         if (paused) {
@@ -353,6 +347,7 @@ export default function App() {
                     scrollOffset={scrollOffset}
                     playheadX={playheadX}
                     playheadFlash={playheadFlash}
+                    renderTrigger={renderTrigger}
                 />
 
                 {/* pulse overlay centered on the playhead - purely visual (pointer-events: none) */}
@@ -390,7 +385,30 @@ export default function App() {
             </div>
 
             <div style={{ marginTop: 10 }}>
-                <label style={{ marginLeft: 12 }}>
+                <div style={{ marginBottom: 8 }}>
+                    <button 
+                        onClick={() => setMode('lesson')} 
+                        style={{ padding: '8px 16px', fontWeight: mode === 'lesson' ? 'bold' : 'normal' }}
+                    >
+                        Lesson Mode
+                    </button>
+                    <button 
+                        onClick={() => setMode('practice')} 
+                        style={{ padding: '8px 16px', marginLeft: 8, fontWeight: mode === 'practice' ? 'bold' : 'normal' }}
+                    >
+                        Random Practice Mode
+                    </button>
+                    {mode === 'practice' && (
+                        <button 
+                            onClick={() => loadTimeline('practice', minNote, maxNote, includeSharps, showValidTiming)}
+                            style={{ padding: '8px 16px', marginLeft: 16, backgroundColor: '#e0ffe0' }}
+                        >
+                            Generate New Exercise
+                        </button>
+                    )}
+                </div>
+
+                <label>
                     Min note:
                     <input style={{ marginLeft: 8 }} value={minNote} onChange={(e) => setMinNote(e.target.value)} />
                 </label>
@@ -398,6 +416,26 @@ export default function App() {
                 <label style={{ marginLeft: 12 }}>
                     Max note:
                     <input style={{ marginLeft: 8 }} value={maxNote} onChange={(e) => setMaxNote(e.target.value)} />
+                </label>
+
+                {mode === 'practice' && (
+                    <label style={{ marginLeft: 12 }}>
+                        <input 
+                            type="checkbox" 
+                            checked={includeSharps} 
+                            onChange={(e) => setIncludeSharps(e.target.checked)} 
+                        />
+                        <span style={{ marginLeft: 4 }}>Include Sharps (Black Keys)</span>
+                    </label>
+                )}
+
+                <label style={{ marginLeft: 12 }}>
+                    <input 
+                        type="checkbox" 
+                        checked={showValidTiming} 
+                        onChange={(e) => setShowValidTiming(e.target.checked)} 
+                    />
+                    <span style={{ marginLeft: 4 }}>Show Valid Timing</span>
                 </label>
 
                 <button onClick={togglePause} style={{ padding: '8px 16px', cursor: 'pointer' }}>

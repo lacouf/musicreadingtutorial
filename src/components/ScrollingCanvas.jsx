@@ -1,7 +1,7 @@
 // src/components/ScrollingCanvas.jsx
 import React, { useEffect, useRef } from 'react';
 
-export default function ScrollingCanvas({ stavesCanvas, notesCanvas, viewportWidth, viewportHeight, scrollOffset, playheadX, playheadFlash }) {
+export default function ScrollingCanvas({ stavesCanvas, notesCanvas, viewportWidth, viewportHeight, scrollOffset, playheadX, playheadFlash, renderTrigger }) {
     const canvasRef = useRef(null);
 
     useEffect(() => {
@@ -36,7 +36,7 @@ export default function ScrollingCanvas({ stavesCanvas, notesCanvas, viewportWid
         ctx.fillStyle = playheadFlash || 'rgba(255,0,0,0.9)';
         ctx.fillRect(playheadX - 1, 0, 2, vis.height);
 
-    }, [stavesCanvas, notesCanvas, viewportWidth, viewportHeight, scrollOffset, playheadX, playheadFlash]);
+    }, [stavesCanvas, notesCanvas, viewportWidth, viewportHeight, scrollOffset, playheadX, playheadFlash, renderTrigger]);
 
     return <canvas ref={canvasRef} style={{ display: 'block' }} />;
 }

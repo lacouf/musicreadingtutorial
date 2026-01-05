@@ -1,11 +1,5 @@
 // src/midi/MidiInput.js
-
-function midiToPitch(midi) {
-    const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const octave = Math.floor(midi / 12) - 1;
-    const name = names[midi % 12];
-    return `${name}${octave}`;
-}
+import { midiToPitch } from '../core/musicUtils';
 
 export function initializeMidi({ onNoteOn, onNoteOff, onLog, onReady }) {
     if (!navigator.requestMIDIAccess) {

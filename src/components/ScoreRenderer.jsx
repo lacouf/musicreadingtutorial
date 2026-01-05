@@ -1,22 +1,10 @@
 // javascript
 // File: src/components/ScoreRenderer.jsx
 import { Renderer, Stave, StaveNote, TickContext } from 'vexflow';
-
-function pitchToMidi(pitch) {
-    if (!pitch || typeof pitch !== 'string') return null;
-    const s = pitch.replace('/', '').toUpperCase();
-    const m = s.match(/^([A-G])(#?)(-?\d+)$/);
-    if (!m) return null;
-    const step = m[1] + (m[2] || '');
-    const octave = parseInt(m[3], 10);
-    const map = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
-    const off = map[step];
-    if (off === undefined) return null;
-    return (octave + 1) * 12 + off;
-}
+import { parsePitchToMidi, STRICT_WINDOW_SECONDS } from '../core/musicUtils';
 
 export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline = [], opts = {}) {
-    const { viewportWidth = 800, viewportHeight = 220, pixelsPerSecond = 120, playheadX = 300, minMidi = 0, maxMidi = 127 } = opts;
+    const { viewportWidth = 800, viewportHeight = 220, pixelsPerSecond = 120, playheadX = 300, minMidi = 0, maxMidi = 127, showValidTiming = false } = opts;
 
     // --- Static staves on the staves canvas (unchanging) ---
     stavesCanvas.width = viewportWidth;
@@ -47,7 +35,7 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
 
     // --- Filter timeline to the requested midi range ---
     const filteredTimeline = timeline.filter(ev => {
-        const midi = (Number.isInteger(ev.midi) ? ev.midi : pitchToMidi(ev.pitch || ev.key || ''));
+        const midi = (Number.isInteger(ev.midi) ? ev.midi : parsePitchToMidi(ev.pitch || ev.key || ''));
         if (midi == null) return false; // drop events without a resolvable midi
         return midi >= (Number.isFinite(minMidi) ? minMidi : 0) && midi <= (Number.isFinite(maxMidi) ? maxMidi : 127);
     });
@@ -70,14 +58,15 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     // compute initial lead so start===0 appears at playheadX
     // Note: VexFlow StaveNotes appear to render with an intrinsic offset relative to the TickContext X.
     // User found 55 to be the optimal offset for alignment.
-    const vexFlowIntrinsicOffset = 55;
-    const initialLeadPixels = Math.max(0, playheadX - marginLeft - vexFlowIntrinsicOffset);
+    const vexFlowIntrinsicOffset = 42;
+    // initialLeadPixels should simply align start=0 to playheadX (Logic/Visual target)
+    const initialLeadPixels = Math.max(0, playheadX - marginLeft);
 
     // split timeline into treble/bass using midi (prefer ev.midi when present)
     const trebleItems = [];
     const bassItems = [];
     for (const ev of filteredTimeline) {
-        const midi = Number.isInteger(ev.midi) ? ev.midi : pitchToMidi(ev.pitch || ev.key || '');
+        const midi = Number.isInteger(ev.midi) ? ev.midi : parsePitchToMidi(ev.pitch || ev.key || '');
         if (midi >= 60) trebleItems.push(ev);
         else bassItems.push(ev);
     }
@@ -93,12 +82,28 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     }
 
     // draw notes by forcing TickContext X from timeline start times + initial lead
+    const strictWindowSeconds = STRICT_WINDOW_SECONDS;
+    const windowPixels = strictWindowSeconds * pixelsPerSecond;
+
     for (const ev of trebleItems) {
         const note = makeVexNoteFrom(ev);
-        const x = marginLeft + (ev.start || 0) * pixelsPerSecond + initialLeadPixels;
+        // logicX: Where the note SHOULD be visually to match the playhead at time t
+        const logicX = marginLeft + (ev.start || 0) * pixelsPerSecond + initialLeadPixels;
+        
+        // vexX: Where we tell VexFlow to draw to achieve logicX (compensating for intrinsic offset)
+        const vexX = logicX - vexFlowIntrinsicOffset;
+
+        // Debug: Draw validation window bars centered on Logic X
+        if (showValidTiming) {
+            notesCtx.fillStyle = "rgba(0, 255, 0, 0.3)";
+            notesCtx.fillRect(logicX - windowPixels, trebleY, windowPixels * 2, 80);
+            notesCtx.fillStyle = "green";
+            notesCtx.fillRect(logicX - windowPixels, trebleY, 2, 80);
+            notesCtx.fillRect(logicX + windowPixels, trebleY, 2, 80);
+        }
 
         const tc = new TickContext();
-        tc.setX(x);
+        tc.setX(vexX);
         tc.setPadding(0);
         tc.addTickable(note);
         note.setTickContext(tc);
@@ -110,10 +115,23 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
 
     for (const ev of bassItems) {
         const note = makeVexNoteFrom(ev);
-        const x = marginLeft + (ev.start || 0) * pixelsPerSecond + initialLeadPixels;
+        // logicX: Where the note SHOULD be visually to match the playhead at time t
+        const logicX = marginLeft + (ev.start || 0) * pixelsPerSecond + initialLeadPixels;
+        
+        // vexX: Where we tell VexFlow to draw to achieve logicX (compensating for intrinsic offset)
+        const vexX = logicX - vexFlowIntrinsicOffset;
+
+        // Debug: Draw validation window bars centered on Logic X
+        if (showValidTiming) {
+            notesCtx.fillStyle = "rgba(0, 255, 0, 0.3)";
+            notesCtx.fillRect(logicX - windowPixels, bassY, windowPixels * 2, 80);
+            notesCtx.fillStyle = "green";
+            notesCtx.fillRect(logicX - windowPixels, bassY, 2, 80);
+            notesCtx.fillRect(logicX + windowPixels, bassY, 2, 80);
+        }
 
         const tc = new TickContext();
-        tc.setX(x);
+        tc.setX(vexX);
         tc.setPadding(0);
         tc.addTickable(note);
         note.setTickContext(tc);
