@@ -20,8 +20,16 @@ export default function ScrollingCanvas({ stavesCanvas, notesCanvas, viewportWid
 
         // Draw the scrolling notes
         if (notesCanvas) {
-            const sx = Math.floor(scrollOffset);
-            ctx.drawImage(notesCanvas, sx, 0, vis.width, vis.height, 0, 0, vis.width, vis.height);
+            let sx = Math.floor(scrollOffset);
+            let dx = 0;
+            
+            // Handle lead-in (negative scroll)
+            if (sx < 0) {
+                dx = -sx;
+                sx = 0;
+            }
+
+            ctx.drawImage(notesCanvas, sx, 0, vis.width - dx, vis.height, dx, 0, vis.width - dx, vis.height);
         }
 
         // Draw playhead

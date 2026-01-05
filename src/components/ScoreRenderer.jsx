@@ -68,7 +68,10 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     notesBassStave.setContext(notesCtx).draw();
 
     // compute initial lead so start===0 appears at playheadX
-    const initialLeadPixels = Math.max(0, playheadX - marginLeft);
+    // Note: VexFlow StaveNotes appear to render with an intrinsic offset relative to the TickContext X.
+    // User found 55 to be the optimal offset for alignment.
+    const vexFlowIntrinsicOffset = 55;
+    const initialLeadPixels = Math.max(0, playheadX - marginLeft - vexFlowIntrinsicOffset);
 
     // split timeline into treble/bass using midi (prefer ev.midi when present)
     const trebleItems = [];

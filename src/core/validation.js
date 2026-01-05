@@ -2,7 +2,7 @@
 
 export function checkNoteAtPlayhead(pitch, timeline, scrollOffset, pixelsPerSecond) {
     const currentTime = scrollOffset / pixelsPerSecond;
-    const tolerance = 0.3; // seconds
+    const tolerance = 0.15; // seconds
     const hits = timeline.filter(n => Math.abs(n.start - currentTime) <= tolerance);
 
     if (hits.length === 0) {

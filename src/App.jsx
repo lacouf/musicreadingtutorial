@@ -7,8 +7,11 @@ import { initializeMidi } from './midi/MidiInput';
 import { exampleJSONLesson, exampleMusicXML, parseTimeline } from './parser/TimeLineParser';
 import LogDisplay from './components/LogDisplay';
 import LessonDisplay from './components/LessonDisplay';
-import { checkNoteAtPlayhead as checkNote } from './core/validation';
 import { audioSynth } from './audio/AudioSynth';
+
+const PIXELS_PER_SECOND = 120;
+const DEFAULT_TEMPO = 1.6;
+const LEAD_IN_SECONDS = 3.0;
 
 export default function App() {
     const stavesRef = useRef(null);
@@ -16,7 +19,11 @@ export default function App() {
     const [midiSupported, setMidiSupported] = useState(false);
     const timelineRef = useRef([]);
     const [log, setLog] = useState([]);
-    const [scrollOffset, setScrollOffset] = useState(0);
+    
+    // Calculate initial scroll based on lead-in and default tempo
+    const initialScroll = (-LEAD_IN_SECONDS * PIXELS_PER_SECOND) / DEFAULT_TEMPO;
+    
+    const [scrollOffset, setScrollOffset] = useState(initialScroll);
     const [playheadFlash, setPlayheadFlash] = useState(null);
     const [paused, setPaused] = useState(true);
     const pausedRef = useRef(true); // Track paused state in ref for synchronous access
@@ -27,8 +34,8 @@ export default function App() {
 
     const animationFrameId = useRef(null);
     const lastFrameTimeRef = useRef(0);
-    const totalActiveTimeRef = useRef(0);
-    const scrollOffsetRef = useRef(0);
+    const totalActiveTimeRef = useRef(-LEAD_IN_SECONDS); // Start with lead-in
+    const scrollOffsetRef = useRef(initialScroll);
 
     // Track recently validated notes to support polyphony
     // Map: timeline event index -> timestamp when it was last validated
@@ -41,10 +48,10 @@ export default function App() {
     const playheadX = 300;
     const viewportWidth = 800;
     const viewportHeight = 220;
-    const pixelsPerSecond = 120;
+    // pixelsPerSecond moved to constant PIXELS_PER_SECOND
 
     // tempoFactor: 1 = original speed; >1 slows playback (notes take longer to reach playhead)
-    const [tempoFactor, setTempoFactor] = useState(1.6);
+    const [tempoFactor, setTempoFactor] = useState(DEFAULT_TEMPO);
 
     // new: min/max note inputs (user-facing strings like 'C4')
     const [minNote, setMinNote] = useState('C3');
@@ -110,7 +117,7 @@ export default function App() {
         // initial render uses current min/max note settings
         const minMidi = parsePitchToMidi(minNote) ?? 0;
         const maxMidi = parsePitchToMidi(maxNote) ?? 127;
-        renderScoreToCanvases(stavesRef.current, notesRef.current, normalizedTimeline, { viewportWidth, viewportHeight, pixelsPerSecond, playheadX, minMidi, maxMidi })
+        renderScoreToCanvases(stavesRef.current, notesRef.current, normalizedTimeline, { viewportWidth, viewportHeight, pixelsPerSecond: PIXELS_PER_SECOND, playheadX, minMidi, maxMidi })
             .then(() => setLog(l => [...l, 'Rendered offscreen score']))
             .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
 
@@ -161,13 +168,14 @@ export default function App() {
                 }
 
                 // Only validate when not paused
-                const playTime = scrollOffsetRef.current / pixelsPerSecond;
-                const windowSec = 0.45;
+                const playTime = scrollOffsetRef.current / PIXELS_PER_SECOND;
+                const windowSec = 0.5; // wider window to detect misses/timing errors
+                const strictWindowSec = 0.15; // strict window for success
 
                 // Clean up old validated notes
                 cleanupValidatedNotes(now);
 
-                // Find all expected notes in the time window
+                // Find all expected notes in the wide window
                 const allCandidates = findEventsInWindow(playTime, windowSec);
 
                 // Filter out recently validated notes (supports polyphony)
@@ -186,8 +194,13 @@ export default function App() {
                     return; // Exit early, don't validate further
                 }
 
-                // Look for exact pitch match among available candidates
-                const exact = candidates.find(c => Number.isInteger(c.ev.midi) && c.ev.midi === note);
+                // Look for strict match (correct pitch AND within strict time window)
+                const exact = candidates.find(c => 
+                    Number.isInteger(c.ev.midi) && 
+                    c.ev.midi === note && 
+                    c.d <= strictWindowSec
+                );
+
                 if (exact) {
                     // Mark this note as validated
                     validatedNotesRef.current.set(exact.index, now);
@@ -196,7 +209,8 @@ export default function App() {
                     setLog(l => [...l, `✅ Correct: played ${note} matched ${key} dt=${exact.d.toFixed(2)}s`]);
                     flashPlayhead('green');
                 } else {
-                    // No exact match - show what was expected
+                    // Missed strict window OR wrong pitch
+                    // Show what was expected (closest candidate)
                     const nearest = candidates[0];
                     const expectedKey = nearest.ev.vfKey || nearest.ev.pitch || `midi:${nearest.ev.midi}`;
                     setLog(l => [...l, `❌ Wrong: played ${note}, expected ${expectedKey} (midi=${nearest.ev.midi}) dt=${nearest.d.toFixed(2)}s`]);
@@ -238,7 +252,7 @@ export default function App() {
         if (!stavesRef.current || !notesRef.current || !timelineRef.current) return;
         const minMidi = parsePitchToMidi(minNote) ?? 0;
         const maxMidi = parsePitchToMidi(maxNote) ?? 127;
-        renderScoreToCanvases(stavesRef.current, notesRef.current, timelineRef.current, { viewportWidth, viewportHeight, pixelsPerSecond, playheadX, minMidi, maxMidi })
+        renderScoreToCanvases(stavesRef.current, notesRef.current, timelineRef.current, { viewportWidth, viewportHeight, pixelsPerSecond: PIXELS_PER_SECOND, playheadX, minMidi, maxMidi })
             .then(() => setLog(l => [...l, `Rendered with range ${minNote} (${minMidi}) -> ${maxNote} (${maxMidi})`]))
             .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
     }, [minNote, maxNote]);
@@ -260,7 +274,7 @@ export default function App() {
             lastFrameTimeRef.current = timestamp;
 
             // tempoFactor slows playback: larger tempoFactor => slower scrolling (longer to reach playhead)
-            const newScrollOffset = totalActiveTimeRef.current * pixelsPerSecond / tempoFactor;
+            const newScrollOffset = totalActiveTimeRef.current * PIXELS_PER_SECOND / tempoFactor;
             scrollOffsetRef.current = newScrollOffset;
             setScrollOffset(newScrollOffset);
 
@@ -272,7 +286,7 @@ export default function App() {
         return () => {
             cancelAnimationFrame(animationFrameId.current);
         };
-    }, [paused, pixelsPerSecond, tempoFactor]); // include tempoFactor so changes apply immediately
+    }, [paused, tempoFactor]); // include tempoFactor so changes apply immediately
 
     // improved flash: also trigger a brief expanding pulse overlay for better visual feedback
     function flashPlayhead(color) {
@@ -304,10 +318,10 @@ export default function App() {
     };
 
     const restart = () => {
-        // Reset to beginning
-        totalActiveTimeRef.current = 0;
-        scrollOffsetRef.current = 0;
-        setScrollOffset(0);
+        // Reset to beginning with lead-in
+        totalActiveTimeRef.current = -LEAD_IN_SECONDS;
+        scrollOffsetRef.current = (-LEAD_IN_SECONDS * PIXELS_PER_SECOND) / tempoFactor;
+        setScrollOffset(scrollOffsetRef.current);
         lastFrameTimeRef.current = 0;
 
         // Clear all tracking
