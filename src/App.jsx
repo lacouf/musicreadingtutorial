@@ -17,6 +17,7 @@ const DEFAULT_TEMPO = TIMING.DEFAULT_TEMPO;
 const LEAD_IN_SECONDS = TIMING.LEAD_IN_SECONDS;
 
 export default function App() {
+    const containerRef = useRef(null);
     const stavesRef = useRef(null);
     const notesRef = useRef(null);
     const [midiSupported, setMidiSupported] = useState(false);
@@ -50,7 +51,7 @@ export default function App() {
     const recentMidiEventsRef = useRef(new Map());
 
     const playheadX = RENDERING.PLAYHEAD_X;
-    const viewportWidth = RENDERING.VIEWPORT_WIDTH;
+    const [viewportWidth, setViewportWidth] = useState(RENDERING.VIEWPORT_WIDTH);
     const viewportHeight = RENDERING.VIEWPORT_HEIGHT;
     // pixelsPerSecond moved to constant PIXELS_PER_SECOND
 
@@ -64,9 +65,34 @@ export default function App() {
 
     const [mode, setMode] = useState('lesson'); // 'lesson' or 'practice'
 
-    const loadTimeline = (currentMode, currentMin, currentMax, currentIncludeSharps, currentShowValidTiming) => {
+    const renderCurrentTimeline = () => {
+        if (!stavesRef.current || !notesRef.current || !timelineRef.current) return;
+        
+        const minMidi = parsePitchToMidi(minNote) ?? MIDI.MIN_MIDI;
+        const maxMidi = parsePitchToMidi(maxNote) ?? MIDI.MAX_MIDI;
+
+        renderScoreToCanvases(stavesRef.current, notesRef.current, timelineRef.current, { 
+            viewportWidth, 
+            viewportHeight, 
+            pixelsPerSecond: PIXELS_PER_SECOND, 
+            playheadX, 
+            minMidi, 
+            maxMidi,
+            showValidTiming
+        })
+            .then(() => {
+                setRenderTrigger(t => t + 1);
+            })
+            .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
+    };
+
+    const loadTimeline = () => {
+        // Ensure canvases exist
+        if (!stavesRef.current) stavesRef.current = document.createElement('canvas');
+        if (!notesRef.current) notesRef.current = document.createElement('canvas');
+
         let rawTimeline;
-        if (currentMode === 'lesson') {
+        if (mode === 'lesson') {
             const useJson = true;
             rawTimeline = parseTimeline(
                 useJson ? 'json' : 'musicxml',
@@ -74,7 +100,7 @@ export default function App() {
                 exampleJSONLesson.tempo
             );
         } else {
-            rawTimeline = generateRandomTimeline(currentMin, currentMax, 20, 80, currentIncludeSharps);
+            rawTimeline = generateRandomTimeline(minNote, maxNote, 20, 80, includeSharps);
         }
 
         // normalize and annotate timeline events with midi and a canonical VexFlow key
@@ -94,31 +120,14 @@ export default function App() {
         });
 
         timelineRef.current = normalizedTimeline;
-
-        // render offscreen canvases
-        const minMidi = parsePitchToMidi(currentMin) ?? MIDI.MIN_MIDI;
-        const maxMidi = parsePitchToMidi(currentMax) ?? MIDI.MAX_MIDI;
-        renderScoreToCanvases(stavesRef.current, notesRef.current, normalizedTimeline, { 
-            viewportWidth, 
-            viewportHeight, 
-            pixelsPerSecond: PIXELS_PER_SECOND, 
-            playheadX, 
-            minMidi, 
-            maxMidi,
-            showValidTiming: currentShowValidTiming
-        })
-            .then(() => {
-                setLog(l => [...l, `Rendered ${currentMode} mode score`]);
-                setRenderTrigger(t => t + 1);
-            })
-            .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
+        setLog(l => [...l, `Loaded ${mode} timeline`]);
+        
+        renderCurrentTimeline();
     };
 
     useEffect(() => {
         stavesRef.current = document.createElement('canvas');
         notesRef.current = document.createElement('canvas');
-
-        loadTimeline(mode, minNote, maxNote, includeSharps, showValidTiming);
 
         // find all timeline events within a time window, sorted by distance
         function findEventsInWindow(timeSec, windowSec = 0.45) {
@@ -246,11 +255,34 @@ export default function App() {
         };
     }, []); // initial setup only
 
-    // Re-render when min/max note inputs change or when timeline changes
+    // Handle window resize
     useEffect(() => {
-        if (!stavesRef.current || !notesRef.current || !timelineRef.current) return;
-        loadTimeline(mode, minNote, maxNote, includeSharps, showValidTiming);
-    }, [minNote, maxNote, mode, includeSharps, showValidTiming]);
+        const handleResize = (entries) => {
+            for (let entry of entries) {
+                // Use contentRect.width to get the width of the container
+                setViewportWidth(entry.contentRect.width);
+            }
+        };
+
+        const observer = new ResizeObserver(handleResize);
+        if (containerRef.current) {
+            observer.observe(containerRef.current);
+        }
+
+        return () => {
+            observer.disconnect();
+        };
+    }, []);
+
+    // Re-load timeline when generation params change
+    useEffect(() => {
+        loadTimeline();
+    }, [mode, minNote, maxNote, includeSharps]);
+
+    // Re-render when display params change
+    useEffect(() => {
+        renderCurrentTimeline();
+    }, [viewportWidth, showValidTiming]);
 
     useEffect(() => {
         if (paused) {
@@ -339,7 +371,19 @@ export default function App() {
             <h2>Music Tutorial — Minimal Starter</h2>
             <p>Open this page in Chrome. Connect a MIDI keyboard (USB). The score scrolls left; play notes at the red playhead.</p>
 
-            <div style={{ border: '1px solid #ccc', width: viewportWidth, height: viewportHeight, overflow: 'hidden', position: 'relative' }}>
+            <div 
+                ref={containerRef} 
+                style={{ 
+                    border: '1px solid #ccc', 
+                    width: RENDERING.VIEWPORT_WIDTH, // Start with default width
+                    maxWidth: '100%', // Allow shrinking
+                    height: viewportHeight, 
+                    overflow: 'hidden', 
+                    position: 'relative',
+                    resize: 'horizontal', // Allow user resizing
+                    minWidth: '300px' // Minimum width
+                }}
+            >
                 <ScrollingCanvas
                     stavesCanvas={stavesRef.current}
                     notesCanvas={notesRef.current}
@@ -401,7 +445,7 @@ export default function App() {
                     </button>
                     {mode === 'practice' && (
                         <button 
-                            onClick={() => loadTimeline('practice', minNote, maxNote, includeSharps, showValidTiming)}
+                            onClick={() => loadTimeline()}
                             style={{ padding: '8px 16px', marginLeft: 16, backgroundColor: '#e0ffe0' }}
                         >
                             Generate New Exercise
