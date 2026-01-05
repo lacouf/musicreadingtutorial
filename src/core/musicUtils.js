@@ -1,8 +1,10 @@
 // src/core/musicUtils.js
 
+import { MIDI, TIMING } from './constants';
+
 export const NOTES_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-export const STRICT_WINDOW_SECONDS = 0.10;
+export const STRICT_WINDOW_SECONDS = TIMING.STRICT_WINDOW_SECONDS;
 
 export function parsePitchToMidi(pitchStr) {
     if (typeof pitchStr === 'number' && Number.isFinite(pitchStr)) return Math.trunc(pitchStr);
@@ -18,19 +20,19 @@ export function parsePitchToMidi(pitchStr) {
     const stepIndex = NOTES_NAMES.indexOf(step);
     
     if (stepIndex === -1) return null;
-    return (octave + 1) * 12 + stepIndex;
+    return (octave + MIDI.OCTAVE_OFFSET) * MIDI.OCTAVE_SIZE + stepIndex;
 }
 
 export function midiToPitch(midi) {
     if (midi == null || !Number.isInteger(midi)) return null;
-    const name = NOTES_NAMES[midi % 12];
-    const octave = Math.floor(midi / 12) - 1;
+    const name = NOTES_NAMES[midi % MIDI.OCTAVE_SIZE];
+    const octave = Math.floor(midi / MIDI.OCTAVE_SIZE) - MIDI.OCTAVE_OFFSET;
     return `${name}${octave}`;
 }
 
 export function midiToVexKey(midi) {
     if (midi == null || !Number.isInteger(midi)) return null;
-    const name = NOTES_NAMES[midi % 12].toLowerCase();
-    const octave = Math.floor(midi / 12) - 1;
+    const name = NOTES_NAMES[midi % MIDI.OCTAVE_SIZE].toLowerCase();
+    const octave = Math.floor(midi / MIDI.OCTAVE_SIZE) - MIDI.OCTAVE_OFFSET;
     return `${name}/${octave}`;
 }

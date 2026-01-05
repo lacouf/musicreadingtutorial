@@ -1,5 +1,6 @@
 // src/components/ScrollingCanvas.jsx
 import React, { useEffect, useRef } from 'react';
+import { RENDERING } from '../core/constants';
 
 export default function ScrollingCanvas({ stavesCanvas, notesCanvas, viewportWidth, viewportHeight, scrollOffset, playheadX, playheadFlash, renderTrigger }) {
     const canvasRef = useRef(null);
@@ -33,8 +34,8 @@ export default function ScrollingCanvas({ stavesCanvas, notesCanvas, viewportWid
         }
 
         // Draw playhead
-        ctx.fillStyle = playheadFlash || 'rgba(255,0,0,0.9)';
-        ctx.fillRect(playheadX - 1, 0, 2, vis.height);
+        ctx.fillStyle = playheadFlash || RENDERING.PLAYHEAD_COLOR;
+        ctx.fillRect(playheadX - (RENDERING.PLAYHEAD_LINE_WIDTH / 2), 0, RENDERING.PLAYHEAD_LINE_WIDTH, vis.height);
 
     }, [stavesCanvas, notesCanvas, viewportWidth, viewportHeight, scrollOffset, playheadX, playheadFlash, renderTrigger]);
 

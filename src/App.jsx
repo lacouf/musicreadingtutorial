@@ -8,12 +8,13 @@ import { exampleJSONLesson, exampleMusicXML, parseTimeline } from './parser/Time
 import LogDisplay from './components/LogDisplay';
 import LessonDisplay from './components/LessonDisplay';
 import { audioSynth } from './audio/AudioSynth';
-import { parsePitchToMidi, midiToVexKey, STRICT_WINDOW_SECONDS } from './core/musicUtils';
+import { parsePitchToMidi, midiToVexKey } from './core/musicUtils';
 import { generateRandomTimeline } from './core/NoteGenerator';
+import { RENDERING, TIMING, MIDI } from './core/constants';
 
-const PIXELS_PER_SECOND = 120;
-const DEFAULT_TEMPO = 1.6;
-const LEAD_IN_SECONDS = 3.0;
+const PIXELS_PER_SECOND = RENDERING.PIXELS_PER_SECOND;
+const DEFAULT_TEMPO = TIMING.DEFAULT_TEMPO;
+const LEAD_IN_SECONDS = TIMING.LEAD_IN_SECONDS;
 
 export default function App() {
     const stavesRef = useRef(null);
@@ -48,9 +49,9 @@ export default function App() {
     // Map: MIDI note number -> timestamp of last event
     const recentMidiEventsRef = useRef(new Map());
 
-    const playheadX = 300;
-    const viewportWidth = 800;
-    const viewportHeight = 220;
+    const playheadX = RENDERING.PLAYHEAD_X;
+    const viewportWidth = RENDERING.VIEWPORT_WIDTH;
+    const viewportHeight = RENDERING.VIEWPORT_HEIGHT;
     // pixelsPerSecond moved to constant PIXELS_PER_SECOND
 
     // tempoFactor: 1 = original speed; >1 slows playback (notes take longer to reach playhead)
@@ -95,8 +96,8 @@ export default function App() {
         timelineRef.current = normalizedTimeline;
 
         // render offscreen canvases
-        const minMidi = parsePitchToMidi(currentMin) ?? 0;
-        const maxMidi = parsePitchToMidi(currentMax) ?? 127;
+        const minMidi = parsePitchToMidi(currentMin) ?? MIDI.MIN_MIDI;
+        const maxMidi = parsePitchToMidi(currentMax) ?? MIDI.MAX_MIDI;
         renderScoreToCanvases(stavesRef.current, notesRef.current, normalizedTimeline, { 
             viewportWidth, 
             viewportHeight, 

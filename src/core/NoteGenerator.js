@@ -1,5 +1,6 @@
 // src/core/NoteGenerator.js
 import { parsePitchToMidi, midiToPitch, midiToVexKey } from './musicUtils';
+import { TIMING, GENERATOR } from './constants';
 
 /**
  * Generates a random sequence of notes within a given range.
@@ -10,11 +11,11 @@ import { parsePitchToMidi, midiToPitch, midiToVexKey } from './musicUtils';
  * @param {boolean} includeSharps - Whether to include sharp/black key notes (default true)
  * @returns {Array} - Timeline of note objects
  */
-export function generateRandomTimeline(minPitch, maxPitch, count = 20, tempo = 80, includeSharps = true) {
-    const minMidi = parsePitchToMidi(minPitch) ?? 60;
-    const maxMidi = parsePitchToMidi(maxPitch) ?? 72;
+export function generateRandomTimeline(minPitch, maxPitch, count = GENERATOR.DEFAULT_COUNT, tempo = GENERATOR.DEFAULT_TEMPO_BPM, includeSharps = true) {
+    const minMidi = parsePitchToMidi(minPitch) ?? GENERATOR.DEFAULT_MIN_MIDI;
+    const maxMidi = parsePitchToMidi(maxPitch) ?? GENERATOR.DEFAULT_MAX_MIDI;
     
-    const secPerBeat = 60.0 / tempo;
+    const secPerBeat = TIMING.SECONDS_IN_MINUTE / tempo;
     const timeline = [];
     let currentTime = 0;
     
@@ -34,7 +35,7 @@ export function generateRandomTimeline(minPitch, maxPitch, count = 20, tempo = 8
         const midi = pool[Math.floor(Math.random() * pool.length)];
         const pitch = midiToPitch(midi);
         const vfKey = midiToVexKey(midi);
-        const dur = 1.0; // Fixed duration of 1 beat for practice
+        const dur = GENERATOR.DEFAULT_NOTE_DURATION_BEATS; // Fixed duration of 1 beat for practice
         
         timeline.push({
             start: currentTime,
@@ -45,7 +46,7 @@ export function generateRandomTimeline(minPitch, maxPitch, count = 20, tempo = 8
             key: vfKey
         });
         
-        currentTime += dur * secPerBeat + 0.5; // Add some space between notes
+        currentTime += dur * secPerBeat + (GENERATOR.DEFAULT_NOTE_SPACING_BEATS * secPerBeat); // Add some space between notes
     }
     
     return timeline;
