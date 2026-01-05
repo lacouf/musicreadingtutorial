@@ -91,8 +91,7 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     }
 
     // draw notes by forcing TickContext X from timeline start times + initial lead
-    const strictWindowSeconds = STRICT_WINDOW_SECONDS;
-    const windowPixels = strictWindowSeconds * pixelsPerSecond;
+    const windowPixels = STRICT_WINDOW_SECONDS * pixelsPerSecond;
 
     for (const ev of trebleItems) {
         const note = makeVexNoteFrom(ev);
