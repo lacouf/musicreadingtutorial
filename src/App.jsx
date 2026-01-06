@@ -15,6 +15,7 @@ import { RENDERING, TIMING, MIDI } from './core/constants';
 const PIXELS_PER_SECOND = RENDERING.PIXELS_PER_SECOND;
 const DEFAULT_TEMPO = TIMING.DEFAULT_TEMPO;
 const LEAD_IN_SECONDS = TIMING.LEAD_IN_SECONDS;
+const STRICT_WINDOW_SECONDS = TIMING.STRICT_WINDOW_SECONDS;
 
 export default function App() {
     const containerRef = useRef(null);
@@ -375,13 +376,13 @@ export default function App() {
                 ref={containerRef} 
                 style={{ 
                     border: '1px solid #ccc', 
-                    width: RENDERING.VIEWPORT_WIDTH, // Start with default width
-                    maxWidth: '100%', // Allow shrinking
+                    width: viewportWidth, 
+                    maxWidth: '100%', 
                     height: viewportHeight, 
                     overflow: 'hidden', 
                     position: 'relative',
-                    resize: 'horizontal', // Allow user resizing
-                    minWidth: '300px' // Minimum width
+                    resize: 'horizontal', 
+                    minWidth: '300px'
                 }}
             >
                 <ScrollingCanvas
@@ -407,7 +408,8 @@ export default function App() {
                         pointerEvents: 'none',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center'
+                        justifyContent: 'center',
+                        zIndex: 10
                     }}
                 >
                     <div
