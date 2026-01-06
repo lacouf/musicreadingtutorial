@@ -1,4 +1,6 @@
 
+import { describe, it, expect } from 'vitest';
+
 const timeline = [
     { start: 0.0, midi: 60 }, // C4
     { start: 5.0, midi: 60 }, // C4
@@ -17,21 +19,20 @@ function findEventsInWindow(timeSec, windowSec = 0.45) {
     return out;
 }
 
-// Test case 1: Playhead at 5.0. Should match note at 5.0.
-console.log("At 5.0:", findEventsInWindow(5.0));
+describe('Validation Logic', () => {
+    it('matches note at exact time', () => {
+        const result = findEventsInWindow(5.0);
+        expect(result).toHaveLength(1);
+        expect(result[0].ev.start).toBe(5.0);
+    });
 
-// Test case 2: Playhead at 5.5. Should not match (d=0.5 > 0.45).
-console.log("At 5.5:", findEventsInWindow(5.5));
+    it('does not match note outside window (5.5s)', () => {
+        const result = findEventsInWindow(5.5);
+        expect(result).toHaveLength(0);
+    });
 
-// Test case 3: Playhead at 8.0. Should not match any (nearest is 5.0 and 10.0, d=3.0/2.0).
-console.log("At 8.0:", findEventsInWindow(8.0));
-
-// Test case 4: User plays note from "many beats before".
-// Playhead at 10.0. User plays note. Matches 10.0.
-// Playhead at 10.0. User plays note that was at 5.0?
-// Validation is triggered by USER INPUT.
-// Input happens at real time T.
-// System checks score at time T (mapped to scroll).
-// If I am at 10.0, and I play C4. System looks for C4 near 10.0.
-// It finds C4 at 10.0.
-// It does NOT find C4 at 5.0.
+    it('does not match note outside window (8.0s)', () => {
+        const result = findEventsInWindow(8.0);
+        expect(result).toHaveLength(0);
+    });
+});
