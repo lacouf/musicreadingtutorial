@@ -24,6 +24,19 @@ export const RENDERING = {
     PLAYHEAD_COLOR: 'rgba(255,0,0,0.9)',
 };
 
+export const BEATS = {
+    WHOLE: 4.0,
+    HALF: 2.0,
+    QUARTER: 1.0,
+    EIGHTH: 0.5,
+    SIXTEENTH: 0.25,
+    DOTTED_WHOLE: 6.0,
+    DOTTED_HALF: 3.0,
+    DOTTED_QUARTER: 1.5,
+    DOTTED_EIGHTH: 0.75,
+    EPSILON: 0.001
+};
+
 export const TIMING = {
     DEFAULT_TEMPO: 1.6,
     LEAD_IN_SECONDS: 3.0,

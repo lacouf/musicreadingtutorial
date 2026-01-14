@@ -3,6 +3,7 @@
 import { Renderer, Stave, StaveNote, TickContext } from 'vexflow';
 import { parsePitchToMidi, STRICT_WINDOW_SECONDS } from '../core/musicUtils';
 import { RENDERING, MIDI, COLORS } from '../core/constants';
+import { beatsToVexDuration } from '../core/durationConverter';
 
 export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline = [], opts = {}) {
     const { 
@@ -86,8 +87,18 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         const m = raw.match(/^([A-Ga-g]#?)\/?(-?\d+)$/);
         const step = m ? m[1].toLowerCase() : 'c';
         const oct = m ? m[2] : '4';
-        const dur = (ev.dur || ev.duration || 0) >= RENDERING.HALF_NOTE_DURATION_THRESHOLD ? "h" : "q";
-        return new StaveNote({ keys: [`${step}/${oct}`], duration: dur });
+        
+        // Use explicit durationBeats if available, otherwise estimate from duration in seconds (assuming 60bpm for legacy)
+        // If durationBeats is missing, we might assume 1 beat = 1 second for fallback, or just default to 1
+        const beats = ev.durationBeats || (ev.dur ? ev.dur / (60/60) : 1);
+        
+        const { duration, dots } = beatsToVexDuration(beats);
+        
+        const note = new StaveNote({ keys: [`${step}/${oct}`], duration: duration });
+        if (dots > 0) {
+            note.addDot(0);
+        }
+        return note;
     }
 
     // draw notes by forcing TickContext X from timeline start times + initial lead

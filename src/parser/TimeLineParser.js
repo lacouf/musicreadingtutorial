@@ -1,5 +1,6 @@
 // src/parser/TimeLineParser.js
 import { parsePitchToMidi } from '../core/musicUtils';
+import { TIMING } from '../core/constants';
 
 export const exampleJSONLesson = {
     title: 'Polyphonic Exercise with Chords',
@@ -102,7 +103,7 @@ export function simpleMusicXMLtoTimeline(xmlString, tempo = 60) {
     let beatType = 4;
     const timeline = [];
     
-    const secPerBeat = 60.0 / tempo;
+    const secPerBeat = TIMING.SECONDS_IN_MINUTE / tempo;
 
     const parts = doc.querySelectorAll('part');
     parts.forEach(part => {
