@@ -1,13 +1,14 @@
 // src/parser/TimeLineParser.js
+import { parsePitchToMidi } from '../core/musicUtils';
 
 export const exampleJSONLesson = {
     title: 'Polyphonic Exercise with Chords',
     tempo: 80,
     notes: [
         // === Section 1: Single notes (warm up) ===
-        { start: 0.0, dur: 0.5, pitch: 'C4' },
-        { start: 0.5, dur: 0.5, pitch: 'D4' },
-        { start: 1.0, dur: 0.5, pitch: 'E4' },
+        { measure: 1, beat: 1, beatFraction: 0, durationBeats: 0.5, start: 0.0, dur: 0.5, pitch: 'C4', midi: 60 },
+        { measure: 1, beat: 1, beatFraction: 0.5, durationBeats: 0.5, start: 0.375, dur: 0.375, pitch: 'D4', midi: 62 }, // Adjusted for tempo 80
+        { measure: 1, beat: 2, beatFraction: 0, durationBeats: 0.5, start: 0.75, dur: 0.375, pitch: 'E4', midi: 64 },
 
         // === Section 2: Two-note intervals (thirds) ===
         // C-E interval at 2.0s
@@ -93,34 +94,101 @@ export const exampleMusicXML = `<?xml version="1.0" encoding="UTF-8"?>
 </score-partwise>`;
 
 export function simpleMusicXMLtoTimeline(xmlString, tempo = 60) {
-    // Very small parser: extracts note pitch and duration (in beats) and generates start times in seconds.
     const parser = new DOMParser();
     const doc = parser.parseFromString(xmlString, 'application/xml');
-    const notes = Array.from(doc.querySelectorAll('note'))
-        .filter(n => !n.querySelector('rest'))
-        .map(n => {
-            const step = n.querySelector('pitch > step')?.textContent || 'C';
-            const alter = n.querySelector('pitch > alter')?.textContent || null;
-            const octave = n.querySelector('pitch > octave')?.textContent || '4';
-            const dur = parseFloat(n.querySelector('duration')?.textContent || '1');
-            const stepName = alter ? `${step}#` : step;
-            return { pitch: `${stepName}${octave}`, dur }; // dur is in divisions/beats (approx)
-        });
-
-    // convert to seconds assuming divisions=1 and tempo (bpm) -> seconds per beat
+    
+    let divisions = 1;
+    let beatsPerMeasure = 4;
+    let beatType = 4;
+    const timeline = [];
+    
     const secPerBeat = 60.0 / tempo;
-    let t = 0;
-    const timeline = notes.map(n => {
-        const item = { start: t, dur: n.dur * secPerBeat, pitch: n.pitch };
-        t += n.dur * secPerBeat;
-        return item;
+
+    const parts = doc.querySelectorAll('part');
+    parts.forEach(part => {
+        let cumulativeBeats = 0;
+        const measures = part.querySelectorAll('measure');
+        
+        measures.forEach(measure => {
+            const measureNumber = parseInt(measure.getAttribute('number') || '1', 10);
+            
+            const attr = measure.querySelector('attributes');
+            if (attr) {
+                const div = attr.querySelector('divisions');
+                if (div) divisions = parseInt(div.textContent, 10);
+                
+                const time = attr.querySelector('time');
+                if (time) {
+                    beatsPerMeasure = parseInt(time.querySelector('beats')?.textContent || '4', 10);
+                    beatType = parseInt(time.querySelector('beat-type')?.textContent || '4', 10);
+                }
+            }
+
+            let measureBeatOffset = 0;
+            const notes = measure.querySelectorAll('note');
+            
+            notes.forEach(note => {
+                const isRest = note.querySelector('rest');
+                const isChord = note.querySelector('chord');
+                const duration = parseInt(note.querySelector('duration')?.textContent || '0', 10);
+                const durationBeats = duration / divisions;
+
+                if (isChord) {
+                    // Chord note starts at the same time as the previous note
+                    // So we don't advance measureBeatOffset, and we use the previous note's start time
+                }
+
+                // If it was a chord, we need to know the start beat of the previous note
+                const startBeatInMeasure = isChord && timeline.length > 0 
+                    ? timeline[timeline.length - 1].beat + timeline[timeline.length - 1].beatFraction - 1
+                    : measureBeatOffset;
+
+                const absoluteBeat = cumulativeBeats + startBeatInMeasure;
+                const timeSec = absoluteBeat * secPerBeat;
+
+                if (!isRest) {
+                    const step = note.querySelector('pitch > step')?.textContent || 'C';
+                    const alter = note.querySelector('pitch > alter')?.textContent || null;
+                    const octave = note.querySelector('pitch > octave')?.textContent || '4';
+                    const stepName = alter ? (parseInt(alter) > 0 ? `${step}#` : `${step}b`) : step;
+                    const pitch = `${stepName}${octave}`;
+                    const midi = parsePitchToMidi(pitch);
+
+                    timeline.push({
+                        measure: measureNumber,
+                        beat: Math.floor(startBeatInMeasure) + 1,
+                        beatFraction: startBeatInMeasure % 1,
+                        durationBeats: durationBeats,
+                        timeSec: timeSec,
+                        start: timeSec, // Backward compatibility
+                        dur: durationBeats * secPerBeat, // Backward compatibility
+                        pitch: pitch,
+                        midi: midi
+                    });
+                }
+
+                if (!isChord) {
+                    measureBeatOffset += durationBeats;
+                }
+            });
+            cumulativeBeats += beatsPerMeasure;
+        });
     });
+
     return timeline;
 }
 
 export function parseTimeline(lessonType, lessonData, tempo) {
     if (lessonType === 'json') {
-        return lessonData.notes.map(n => ({ start: n.start, dur: n.dur, pitch: n.pitch }));
+        return lessonData.notes.map(n => {
+            const midi = n.midi ?? parsePitchToMidi(n.pitch || '');
+            return {
+                ...n,
+                midi: midi,
+                start: n.start ?? 0, // ensure we have start for current logic
+                timeSec: n.timeSec ?? n.start ?? 0
+            };
+        });
     } else if (lessonType === 'musicxml') {
         return simpleMusicXMLtoTimeline(lessonData, tempo);
     }
