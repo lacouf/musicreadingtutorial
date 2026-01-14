@@ -65,6 +65,7 @@ export default function App() {
     const [showValidTiming, setShowValidTiming] = useState(true);
 
     const [mode, setMode] = useState('lesson'); // 'lesson' or 'practice'
+    const [lessonMeta, setLessonMeta] = useState({ tempo: 80, beatsPerMeasure: 4 });
 
     const renderCurrentTimeline = () => {
         if (!stavesRef.current || !notesRef.current || !timelineRef.current) return;
@@ -79,7 +80,9 @@ export default function App() {
             playheadX, 
             minMidi, 
             maxMidi,
-            showValidTiming
+            showValidTiming,
+            tempo: lessonMeta.tempo,
+            beatsPerMeasure: lessonMeta.beatsPerMeasure
         })
             .then(() => {
                 setRenderTrigger(t => t + 1);
@@ -93,16 +96,26 @@ export default function App() {
         if (!notesRef.current) notesRef.current = document.createElement('canvas');
 
         let rawTimeline;
+        let newMeta = { tempo: 80, beatsPerMeasure: 4 };
+
         if (mode === 'lesson') {
             const useJson = true;
+            const lessonData = useJson ? exampleJSONLesson : exampleMusicXML;
+            newMeta = { 
+                tempo: lessonData.tempo || 80, 
+                beatsPerMeasure: lessonData.timeSignature?.numerator || 4 
+            };
             rawTimeline = parseTimeline(
                 useJson ? 'json' : 'musicxml',
-                useJson ? exampleJSONLesson : exampleMusicXML,
-                exampleJSONLesson.tempo
+                lessonData,
+                newMeta.tempo
             );
         } else {
-            rawTimeline = generateRandomTimeline(minNote, maxNote, 20, 80, includeSharps);
+            newMeta = { tempo: 80, beatsPerMeasure: 4 };
+            rawTimeline = generateRandomTimeline(minNote, maxNote, 20, newMeta.tempo, includeSharps);
         }
+
+        setLessonMeta(newMeta);
 
         // normalize and annotate timeline events with midi and a canonical VexFlow key
         const normalizedTimeline = rawTimeline.map(ev => {
@@ -178,8 +191,11 @@ export default function App() {
 
                 // Only validate when not paused
                 const playTime = scrollOffsetRef.current / PIXELS_PER_SECOND;
-                const windowSec = 0.5; // wider window to detect misses/timing errors
-                const strictWindowSec = STRICT_WINDOW_SECONDS; // strict window for success
+                
+                // Calculate beat-based windows
+                const secPerBeat = TIMING.SECONDS_IN_MINUTE / lessonMeta.tempo;
+                const windowSec = TIMING.WIDE_BEAT_TOLERANCE * secPerBeat;
+                const strictWindowSec = TIMING.STRICT_BEAT_TOLERANCE * secPerBeat;
 
                 // Clean up old validated notes
                 cleanupValidatedNotes(now);
@@ -215,14 +231,16 @@ export default function App() {
                     validatedNotesRef.current.set(exact.index, now);
 
                     const key = exact.ev.vfKey || exact.ev.pitch || `midi:${exact.ev.midi}`;
-                    setLog(l => [...l, `✅ Correct: played ${note} matched ${key} dt=${exact.d.toFixed(2)}s`]);
+                    const diffBeats = exact.d / secPerBeat;
+                    setLog(l => [...l, `✅ Correct: ${key} (dt=${diffBeats.toFixed(2)} beats)`]);
                     flashPlayhead('green');
                 } else {
                     // Missed strict window OR wrong pitch
                     // Show what was expected (closest candidate)
                     const nearest = candidates[0];
                     const expectedKey = nearest.ev.vfKey || nearest.ev.pitch || `midi:${nearest.ev.midi}`;
-                    setLog(l => [...l, `❌ Wrong: played ${note}, expected ${expectedKey} (midi=${nearest.ev.midi}) dt=${nearest.d.toFixed(2)}s`]);
+                    const diffBeats = nearest.d / secPerBeat;
+                    setLog(l => [...l, `❌ Wrong: played ${note}, expected ${expectedKey} (dt=${diffBeats.toFixed(2)} beats)`]);
                     flashPlayhead('red');
                 }
             },
@@ -283,7 +301,7 @@ export default function App() {
     // Re-render when display params change
     useEffect(() => {
         renderCurrentTimeline();
-    }, [viewportWidth, showValidTiming]);
+    }, [viewportWidth, showValidTiming, lessonMeta]);
 
     useEffect(() => {
         if (paused) {

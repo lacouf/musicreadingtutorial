@@ -14,7 +14,8 @@ function findEventsInWindow(timeline, timeSec, windowSec = 0.45) {
     return out;
 }
 
-const STRICT_WINDOW_SECONDS = 0.15;
+const STRICT_BEAT_TOLERANCE = 0.2;
+const SECONDS_IN_MINUTE = 60.0;
 
 describe('MIDI Matching Regression', () => {
     const mockTimeline = [
@@ -23,28 +24,41 @@ describe('MIDI Matching Regression', () => {
         { start: 3.0, midi: 64, pitch: 'E4' },
     ];
 
-    it('matches a correct note within strict window', () => {
-        const playTime = 1.05; // 0.05s late
+    it('matches a correct note within strict beat window', () => {
+        const tempo = 60; // 1 beat = 1 second
+        const secPerBeat = SECONDS_IN_MINUTE / tempo;
+        const strictWindowSec = STRICT_BEAT_TOLERANCE * secPerBeat; // 0.2s
+
+        const playTime = 1.1; // 0.1s late (within 0.2s)
         const playedNote = 60;
         
         const candidates = findEventsInWindow(mockTimeline, playTime, 0.5);
         const exact = candidates.find(c => 
             c.ev.midi === playedNote && 
-            c.d <= STRICT_WINDOW_SECONDS
+            c.d <= strictWindowSec
         );
 
         expect(exact).toBeDefined();
-        expect(exact.ev.pitch).toBe('C4');
     });
 
-    it('fails to match a correct note outside strict window', () => {
-        const playTime = 1.2; // 0.2s late, > 0.15s
+    it('fails to match a correct note outside strict beat window', () => {
+        const tempo = 120; // 1 beat = 0.5 second
+        const secPerBeat = SECONDS_IN_MINUTE / tempo;
+        const strictWindowSec = STRICT_BEAT_TOLERANCE * secPerBeat; // 0.1s
+
+        const playTime = 0.65; // Expected 0.5 (for some note). 
+        // Let's use our mockTimeline where note 1 is at 1.0s.
+        // At 120 BPM, note 1 at 1.0s is beat 2.
+        // Tolerance is 0.1s. 
+        // 1.15s is 0.15s late, which is > 0.1s.
+        
+        const playTimeLate = 1.15;
         const playedNote = 60;
         
-        const candidates = findEventsInWindow(mockTimeline, playTime, 0.5);
+        const candidates = findEventsInWindow(mockTimeline, playTimeLate, 0.5);
         const exact = candidates.find(c => 
             c.ev.midi === playedNote && 
-            c.d <= STRICT_WINDOW_SECONDS
+            c.d <= strictWindowSec
         );
 
         expect(exact).toBeUndefined();

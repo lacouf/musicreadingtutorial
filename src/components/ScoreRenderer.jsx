@@ -1,6 +1,6 @@
 // javascript
 // File: src/components/ScoreRenderer.jsx
-import { Renderer, Stave, StaveNote, TickContext } from 'vexflow';
+import { Renderer, Stave, StaveNote, TickContext, Dot } from 'vexflow';
 import { parsePitchToMidi, STRICT_WINDOW_SECONDS } from '../core/musicUtils';
 import { RENDERING, MIDI, COLORS, TIMING } from '../core/constants';
 import { beatsToVexDuration } from '../core/durationConverter';
@@ -125,13 +125,14 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         
         const note = new StaveNote({ keys: [`${step}/${oct}`], duration: duration });
         if (dots > 0) {
-            note.addDot(0);
+            note.addModifier(new Dot(), 0);
         }
         return note;
     }
 
     // draw notes by forcing TickContext X from timeline start times + initial lead
-    const windowPixels = STRICT_WINDOW_SECONDS * pixelsPerSecond;
+    const windowSeconds = TIMING.STRICT_BEAT_TOLERANCE * secPerBeat;
+    const windowPixels = windowSeconds * pixelsPerSecond;
 
     for (const ev of trebleItems) {
         const note = makeVexNoteFrom(ev);
