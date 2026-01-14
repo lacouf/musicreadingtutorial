@@ -2,7 +2,7 @@
 // File: src/components/ScoreRenderer.jsx
 import { Renderer, Stave, StaveNote, TickContext } from 'vexflow';
 import { parsePitchToMidi, STRICT_WINDOW_SECONDS } from '../core/musicUtils';
-import { RENDERING, MIDI, COLORS } from '../core/constants';
+import { RENDERING, MIDI, COLORS, TIMING } from '../core/constants';
 import { beatsToVexDuration } from '../core/durationConverter';
 
 export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline = [], opts = {}) {
@@ -43,6 +43,14 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     stavesCtx.lineTo(marginLeft - RENDERING.STAVE_CONNECTOR_OFFSET, bassY + RENDERING.STAVE_CONNECTOR_BASS_EXTRA);
     stavesCtx.stroke();
 
+    // --- Determine Tempo and Time Signature for measure calculation ---
+    // Note: In Phase 1 we ensured every note has timeSec.
+    // We assume single tempo/timeSig for now as per plan.
+    const tempo = opts.tempo || 60; 
+    const beatsPerMeasure = opts.beatsPerMeasure || 4;
+    const secPerBeat = TIMING.SECONDS_IN_MINUTE / tempo;
+    const secPerMeasure = beatsPerMeasure * secPerBeat;
+
     // --- Filter timeline to the requested midi range ---
     const filteredTimeline = timeline.filter(ev => {
         const midi = (Number.isInteger(ev.midi) ? ev.midi : parsePitchToMidi(ev.pitch || ev.key || ''));
@@ -67,10 +75,31 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
 
     // compute initial lead so start===0 appears at playheadX
     // Note: VexFlow StaveNotes appear to render with an intrinsic offset relative to the TickContext X.
-    // User found 55 to be the optimal offset for alignment.
     const vexFlowIntrinsicOffset = RENDERING.VEXFLOW_INTRINSIC_OFFSET;
-    // initialLeadPixels should simply align start=0 to playheadX (Logic/Visual target)
     const initialLeadPixels = Math.max(0, playheadX - marginLeft);
+
+    // --- Draw Barlines ---
+    const totalDurationSeconds = lastTime;
+    const numMeasures = Math.ceil(totalDurationSeconds / secPerMeasure) + 1;
+    
+    notesCtx.strokeStyle = COLORS.BLACK;
+    notesCtx.lineWidth = 1;
+    notesCtx.fillStyle = COLORS.BLACK;
+    notesCtx.font = "italic 12px serif";
+
+    for (let i = 0; i < numMeasures; i++) {
+        const barTime = i * secPerMeasure;
+        const barX = marginLeft + barTime * pixelsPerSecond + initialLeadPixels - RENDERING.BARLINE_OFFSET_X;
+        
+        // Draw vertical barline across both staves
+        notesCtx.beginPath();
+        notesCtx.moveTo(barX, trebleY);
+        notesCtx.lineTo(barX, bassY + 80); // 80 is roughly the height of a stave
+        notesCtx.stroke();
+
+        // Draw measure number
+        notesCtx.fillText(`${i + 1}`, barX + 5, trebleY - 5);
+    }
 
     // split timeline into treble/bass using midi (prefer ev.midi when present)
     const trebleItems = [];

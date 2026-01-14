@@ -22,6 +22,7 @@ export const RENDERING = {
     VALIDATION_WINDOW_LINE_WIDTH: 2,
     PLAYHEAD_LINE_WIDTH: 2,
     PLAYHEAD_COLOR: 'rgba(255,0,0,0.9)',
+    BARLINE_OFFSET_X: 15,
 };
 
 export const BEATS = {
@@ -50,7 +51,7 @@ export const GENERATOR = {
     DEFAULT_COUNT: 20,
     DEFAULT_TEMPO_BPM: 80,
     DEFAULT_NOTE_DURATION_BEATS: 1.0,
-    DEFAULT_NOTE_SPACING_BEATS: 0.5,
+    DEFAULT_NOTE_SPACING_BEATS: 0.0,
 };
 
 export const MIDI = {
