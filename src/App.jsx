@@ -59,12 +59,12 @@ export default function App() {
     // tempoFactor: 1 = original speed; >1 slows playback (notes take longer to reach playhead)
     const [tempoFactor, setTempoFactor] = useState(DEFAULT_TEMPO);
 
-    const [minNote, setMinNote] = useState('C3');
-    const [maxNote, setMaxNote] = useState('C6');
-    const [includeSharps, setIncludeSharps] = useState(true);
-    const [showValidTiming, setShowValidTiming] = useState(true);
+    const [minNote, setMinNote] = useState('C4');
+    const [maxNote, setMaxNote] = useState('G4');
+    const [includeSharps, setIncludeSharps] = useState(false);
+    const [showValidTiming, setShowValidTiming] = useState(false);
 
-    const [mode, setMode] = useState('lesson'); // 'lesson' or 'practice'
+    const [mode, setMode] = useState('practice'); // 'lesson' or 'practice'
     const [lessonMeta, setLessonMeta] = useState({ tempo: 80, beatsPerMeasure: 4 });
 
     const renderCurrentTimeline = () => {
@@ -450,66 +450,115 @@ export default function App() {
             </div>
 
             <div style={{ marginTop: 10 }}>
-                <div style={{ marginBottom: 8 }}>
-                    <button 
-                        onClick={() => setMode('lesson')} 
-                        style={{ padding: '8px 16px', fontWeight: mode === 'lesson' ? 'bold' : 'normal' }}
-                    >
-                        Lesson Mode
-                    </button>
-                    <button 
-                        onClick={() => setMode('practice')} 
-                        style={{ padding: '8px 16px', marginLeft: 8, fontWeight: mode === 'practice' ? 'bold' : 'normal' }}
-                    >
-                        Random Practice Mode
-                    </button>
-                    {mode === 'practice' && (
+                <div style={{ display: 'flex', gap: '20px', marginBottom: 12 }}>
+                    {/* Practice Mode Box */}
+                    <div style={{ 
+                        border: '1px solid #ddd', 
+                        padding: '12px', 
+                        borderRadius: '8px', 
+                        backgroundColor: '#f9f9f9',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                    }}>
                         <button 
-                            onClick={() => loadTimeline()}
-                            style={{ padding: '8px 16px', marginLeft: 16, backgroundColor: '#e0ffe0' }}
+                            onClick={() => setMode('practice')} 
+                            style={{ 
+                                padding: '8px 16px', 
+                                fontWeight: mode === 'practice' ? 'bold' : 'normal',
+                                backgroundColor: mode === 'practice' ? '#007bff' : '#efefef',
+                                color: mode === 'practice' ? 'white' : 'black',
+                                border: '1px solid #ccc',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                            }}
                         >
-                            Generate New Exercise
+                            Random Practice Mode
                         </button>
-                    )}
+                        
+                        {mode === 'practice' && (
+                            <>
+                                <button 
+                                    onClick={() => loadTimeline()}
+                                    style={{ 
+                                        padding: '8px 16px', 
+                                        backgroundColor: '#e0ffe0',
+                                        border: '1px solid #99cc99',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Generate New Exercise
+                                </button>
+                                
+                                <label style={{ fontSize: '0.9rem' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={includeSharps} 
+                                        onChange={(e) => setIncludeSharps(e.target.checked)} 
+                                    />
+                                    <span style={{ marginLeft: 4 }}>Include Sharps</span>
+                                </label>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Lesson Mode Box */}
+                    <div style={{ 
+                        border: '1px solid #ddd', 
+                        padding: '12px', 
+                        borderRadius: '8px', 
+                        backgroundColor: '#f9f9f9',
+                        display: 'flex',
+                        flexDirection: 'column'
+                    }}>
+                        <button 
+                            onClick={() => setMode('lesson')} 
+                            style={{ 
+                                padding: '8px 16px', 
+                                fontWeight: mode === 'lesson' ? 'bold' : 'normal',
+                                backgroundColor: mode === 'lesson' ? '#007bff' : '#efefef',
+                                color: mode === 'lesson' ? 'white' : 'black',
+                                border: '1px solid #ccc',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Lesson Mode
+                        </button>
+                    </div>
                 </div>
 
-                <label>
-                    Min note:
-                    <input style={{ marginLeft: 8 }} value={minNote} onChange={(e) => setMinNote(e.target.value)} />
-                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'center', marginBottom: 15 }}>
+                    <label>
+                        Min note:
+                        <input style={{ marginLeft: 8, width: '50px' }} value={minNote} onChange={(e) => setMinNote(e.target.value)} />
+                    </label>
 
-                <label style={{ marginLeft: 12 }}>
-                    Max note:
-                    <input style={{ marginLeft: 8 }} value={maxNote} onChange={(e) => setMaxNote(e.target.value)} />
-                </label>
+                    <label>
+                        Max note:
+                        <input style={{ marginLeft: 8, width: '50px' }} value={maxNote} onChange={(e) => setMaxNote(e.target.value)} />
+                    </label>
 
-                {mode === 'practice' && (
-                    <label style={{ marginLeft: 12 }}>
+                    <label>
                         <input 
                             type="checkbox" 
-                            checked={includeSharps} 
-                            onChange={(e) => setIncludeSharps(e.target.checked)} 
+                            checked={showValidTiming} 
+                            onChange={(e) => setShowValidTiming(e.target.checked)} 
                         />
-                        <span style={{ marginLeft: 4 }}>Include Sharps (Black Keys)</span>
+                        <span style={{ marginLeft: 4 }}>Show Valid Timing</span>
                     </label>
-                )}
+                </div>
 
-                <label style={{ marginLeft: 12 }}>
-                    <input 
-                        type="checkbox" 
-                        checked={showValidTiming} 
-                        onChange={(e) => setShowValidTiming(e.target.checked)} 
-                    />
-                    <span style={{ marginLeft: 4 }}>Show Valid Timing</span>
-                </label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button onClick={togglePause} style={{ padding: '8px 16px', cursor: 'pointer' }}>
+                        {paused ? 'Resume Scrolling' : 'Pause Scrolling'}
+                    </button>
 
-                <button onClick={togglePause} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-                    {paused ? 'Resume Scrolling' : 'Pause Scrolling'}
-                </button>
-
-                <button onClick={restart} style={{ padding: '8px 16px', cursor: 'pointer', marginLeft: 8 }}>
-                    Restart
-                </button>
+                    <button onClick={restart} style={{ padding: '8px 16px', cursor: 'pointer' }}>
+                        Restart
+                    </button>
+                </div>
 
                 {/* simple tempo control: increase tempoFactor to slow playback */}
                 <label style={{ marginLeft: 12 }}>

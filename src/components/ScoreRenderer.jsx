@@ -155,6 +155,7 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         tc.setX(vexX);
         tc.setPadding(0);
         tc.addTickable(note);
+        tc.preFormat();
         note.setTickContext(tc);
 
         note.setStave(notesTrebleStave);
@@ -183,6 +184,7 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         tc.setX(vexX);
         tc.setPadding(0);
         tc.addTickable(note);
+        tc.preFormat();
         note.setTickContext(tc);
 
         note.setStave(notesBassStave);
