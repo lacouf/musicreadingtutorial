@@ -3,7 +3,8 @@
 export const RENDERING = {
     VIEWPORT_WIDTH: 800,
     VIEWPORT_HEIGHT: 220,
-    PIXELS_PER_SECOND: 120,
+    PIXELS_PER_SECOND: 120, // Deprecated in favor of dynamic calculation
+    PIXELS_PER_BEAT: 100,     // New constant for beat-based positioning
     PLAYHEAD_X: 300,
     MARGIN_LEFT: 20,
     TREBLE_Y: 20,

@@ -181,13 +181,43 @@ export function simpleMusicXMLtoTimeline(xmlString, tempo = 60) {
 
 export function parseTimeline(lessonType, lessonData, tempo) {
     if (lessonType === 'json') {
+        const secPerBeat = TIMING.SECONDS_IN_MINUTE / tempo;
+        const beatsPerMeasure = lessonData.timeSignature?.numerator || 4;
+
         return lessonData.notes.map(n => {
             const midi = n.midi ?? parsePitchToMidi(n.pitch || '');
+            
+            // Calculate missing musical timing fields if needed
+            let measure = n.measure;
+            let beat = n.beat;
+            let beatFraction = n.beatFraction;
+            let durationBeats = n.durationBeats;
+
+            if (measure === undefined || beat === undefined) {
+                // Infer from start time (seconds)
+                const startSec = n.start ?? 0;
+                const totalBeats = startSec / secPerBeat;
+                
+                measure = Math.floor(totalBeats / beatsPerMeasure) + 1;
+                const beatInMeasure = totalBeats % beatsPerMeasure;
+                beat = Math.floor(beatInMeasure) + 1;
+                beatFraction = beatInMeasure % 1;
+            }
+
+            if (durationBeats === undefined) {
+                const durSec = n.dur ?? 0;
+                durationBeats = durSec / secPerBeat;
+            }
+
             return {
                 ...n,
                 midi: midi,
-                start: n.start ?? 0, // ensure we have start for current logic
-                timeSec: n.timeSec ?? n.start ?? 0
+                start: n.start ?? 0,
+                timeSec: n.timeSec ?? n.start ?? 0,
+                measure,
+                beat,
+                beatFraction,
+                durationBeats
             };
         });
     } else if (lessonType === 'musicxml') {

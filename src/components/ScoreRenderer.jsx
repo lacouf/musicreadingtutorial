@@ -4,12 +4,14 @@ import { Renderer, Stave, StaveNote, TickContext, Dot } from 'vexflow';
 import { parsePitchToMidi, STRICT_WINDOW_SECONDS } from '../core/musicUtils';
 import { RENDERING, MIDI, COLORS, TIMING } from '../core/constants';
 import { beatsToVexDuration } from '../core/durationConverter';
+import { calculateNoteX } from '../core/layoutUtils';
 
 export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline = [], opts = {}) {
     const { 
         viewportWidth = RENDERING.VIEWPORT_WIDTH, 
         viewportHeight = RENDERING.VIEWPORT_HEIGHT, 
-        pixelsPerSecond = RENDERING.PIXELS_PER_SECOND, 
+        pixelsPerBeat = RENDERING.PIXELS_PER_BEAT,
+        pixelsPerSecond = RENDERING.PIXELS_PER_SECOND, // Kept for legacy fallback if needed
         playheadX = RENDERING.PLAYHEAD_X, 
         minMidi = MIDI.MIN_MIDI, 
         maxMidi = MIDI.MAX_MIDI, 
@@ -59,8 +61,13 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     });
 
     // --- Notes canvas: size to timeline duration and draw notes at absolute X positions ---
-    const lastTime = filteredTimeline.length ? Math.max(...filteredTimeline.map(t => (t.start || 0) + (t.dur || 0))) : 0;
-    notesCanvas.width = Math.max(RENDERING.MIN_NOTES_CANVAS_WIDTH, Math.ceil(lastTime * pixelsPerSecond) + marginLeft + RENDERING.NOTES_CANVAS_RIGHT_PADDING);
+    const lastNote = filteredTimeline.length > 0 ? filteredTimeline[filteredTimeline.length - 1] : null;
+    // Calculate total beats (approximate from last note)
+    const totalBeats = lastNote 
+        ? ((lastNote.measure || 1) - 1) * beatsPerMeasure + ((lastNote.beat || 1) - 1) + (lastNote.beatFraction || 0) + (lastNote.durationBeats || 0)
+        : 0;
+
+    notesCanvas.width = Math.max(RENDERING.MIN_NOTES_CANVAS_WIDTH, Math.ceil(totalBeats * pixelsPerBeat) + marginLeft + RENDERING.NOTES_CANVAS_RIGHT_PADDING);
     notesCanvas.height = viewportHeight;
 
     const notesRenderer = new Renderer(notesCanvas, Renderer.Backends.CANVAS);
@@ -74,13 +81,11 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     notesBassStave.setContext(notesCtx).draw();
 
     // compute initial lead so start===0 appears at playheadX
-    // Note: VexFlow StaveNotes appear to render with an intrinsic offset relative to the TickContext X.
     const vexFlowIntrinsicOffset = RENDERING.VEXFLOW_INTRINSIC_OFFSET;
     const initialLeadPixels = Math.max(0, playheadX - marginLeft);
 
     // --- Draw Barlines ---
-    const totalDurationSeconds = lastTime;
-    const numMeasures = Math.ceil(totalDurationSeconds / secPerMeasure) + 1;
+    const numMeasures = Math.ceil(totalBeats / beatsPerMeasure) + 1;
     
     notesCtx.strokeStyle = COLORS.BLACK;
     notesCtx.lineWidth = 1;
@@ -88,8 +93,8 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     notesCtx.font = "italic 12px serif";
 
     for (let i = 0; i < numMeasures; i++) {
-        const barTime = i * secPerMeasure;
-        const barX = marginLeft + barTime * pixelsPerSecond + initialLeadPixels - RENDERING.BARLINE_OFFSET_X;
+        // Barline is at the start of measure i+1 (so i * beatsPerMeasure beats from start)
+        const barX = marginLeft + (i * beatsPerMeasure * pixelsPerBeat) + initialLeadPixels - RENDERING.BARLINE_OFFSET_X;
         
         // Draw vertical barline across both staves
         notesCtx.beginPath();
@@ -137,7 +142,7 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     for (const ev of trebleItems) {
         const note = makeVexNoteFrom(ev);
         // logicX: Where the note SHOULD be visually to match the playhead at time t
-        const logicX = marginLeft + (ev.start || 0) * pixelsPerSecond + initialLeadPixels;
+        const logicX = calculateNoteX(ev.measure || 1, ev.beat || 1, ev.beatFraction || 0, pixelsPerBeat, marginLeft, beatsPerMeasure) + initialLeadPixels;
         
         // vexX: Where we tell VexFlow to draw to achieve logicX (compensating for intrinsic offset)
         const vexX = logicX - vexFlowIntrinsicOffset;
@@ -166,7 +171,7 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     for (const ev of bassItems) {
         const note = makeVexNoteFrom(ev);
         // logicX: Where the note SHOULD be visually to match the playhead at time t
-        const logicX = marginLeft + (ev.start || 0) * pixelsPerSecond + initialLeadPixels;
+        const logicX = calculateNoteX(ev.measure || 1, ev.beat || 1, ev.beatFraction || 0, pixelsPerBeat, marginLeft, beatsPerMeasure) + initialLeadPixels;
         
         // vexX: Where we tell VexFlow to draw to achieve logicX (compensating for intrinsic offset)
         const vexX = logicX - vexFlowIntrinsicOffset;

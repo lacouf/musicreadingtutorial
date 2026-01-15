@@ -11,8 +11,9 @@ import { audioSynth } from './audio/AudioSynth';
 import { parsePitchToMidi, midiToVexKey } from './core/musicUtils';
 import { generateRandomTimeline } from './core/NoteGenerator';
 import { RENDERING, TIMING, MIDI } from './core/constants';
+import { calculateScrollSpeed } from './core/layoutUtils';
 
-const PIXELS_PER_SECOND = RENDERING.PIXELS_PER_SECOND;
+const PIXELS_PER_SECOND = RENDERING.PIXELS_PER_SECOND; // Still used for lead-in calculation?
 const DEFAULT_TEMPO = TIMING.DEFAULT_TEMPO;
 const LEAD_IN_SECONDS = TIMING.LEAD_IN_SECONDS;
 const STRICT_WINDOW_SECONDS = TIMING.STRICT_WINDOW_SECONDS;
@@ -25,8 +26,9 @@ export default function App() {
     const timelineRef = useRef([]);
     const [log, setLog] = useState([]);
     
-    // Calculate initial scroll based on lead-in and default tempo
-    const initialScroll = (-LEAD_IN_SECONDS * PIXELS_PER_SECOND) / DEFAULT_TEMPO;
+    // Calculate initial scroll based on lead-in and default tempo (80 BPM)
+    const defaultSpeed = calculateScrollSpeed(80, RENDERING.PIXELS_PER_BEAT);
+    const initialScroll = (-LEAD_IN_SECONDS * defaultSpeed) / DEFAULT_TEMPO;
     
     const [scrollOffset, setScrollOffset] = useState(initialScroll);
     const [renderTrigger, setRenderTrigger] = useState(0); // Forces canvas repaint
@@ -190,10 +192,12 @@ export default function App() {
                 }
 
                 // Only validate when not paused
-                const playTime = scrollOffsetRef.current / PIXELS_PER_SECOND;
+                // Calculate current time in seconds based on scroll position (beats) and tempo
+                const currentBeat = scrollOffsetRef.current / RENDERING.PIXELS_PER_BEAT;
+                const secPerBeat = TIMING.SECONDS_IN_MINUTE / lessonMeta.tempo;
+                const playTime = currentBeat * secPerBeat;
                 
                 // Calculate beat-based windows
-                const secPerBeat = TIMING.SECONDS_IN_MINUTE / lessonMeta.tempo;
                 const windowSec = TIMING.WIDE_BEAT_TOLERANCE * secPerBeat;
                 const strictWindowSec = TIMING.STRICT_BEAT_TOLERANCE * secPerBeat;
 
@@ -320,7 +324,22 @@ export default function App() {
             lastFrameTimeRef.current = timestamp;
 
             // tempoFactor slows playback: larger tempoFactor => slower scrolling (longer to reach playhead)
-            const newScrollOffset = totalActiveTimeRef.current * PIXELS_PER_SECOND / tempoFactor;
+            // Calculate speed dynamically based on BPM and pixels per beat
+            const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
+            const currentSpeed = baseSpeed / tempoFactor;
+            
+            // We can't just multiply totalTime * speed because speed might have changed.
+            // We should integrate delta: offset += delta * speed.
+            // However, the current code uses `totalActiveTimeRef.current * PIXELS_PER_SECOND / tempoFactor`.
+            // This implies current code DOES NOT handle tempo changes correctly (it jumps).
+            // We should switch to integration for smooth transitions, but strict refactoring first:
+            // Let's stick to the current pattern but use the new speed formula if possible, 
+            // OR switch to delta integration which is robust for tempo changes.
+            
+            // Switch to Delta Integration:
+            const deltaScroll = deltaTime * currentSpeed;
+            const newScrollOffset = scrollOffsetRef.current + deltaScroll;
+            
             scrollOffsetRef.current = newScrollOffset;
             setScrollOffset(newScrollOffset);
 
@@ -332,7 +351,7 @@ export default function App() {
         return () => {
             cancelAnimationFrame(animationFrameId.current);
         };
-    }, [paused, tempoFactor]); // include tempoFactor so changes apply immediately
+    }, [paused, tempoFactor, lessonMeta]); // include lessonMeta for tempo changes
 
     // improved flash: also trigger a brief expanding pulse overlay for better visual feedback
     function flashPlayhead(color) {
@@ -366,8 +385,14 @@ export default function App() {
     const restart = () => {
         // Reset to beginning with lead-in
         totalActiveTimeRef.current = -LEAD_IN_SECONDS;
-        scrollOffsetRef.current = (-LEAD_IN_SECONDS * PIXELS_PER_SECOND) / tempoFactor;
-        setScrollOffset(scrollOffsetRef.current);
+        
+        // Calculate initial scroll position based on current settings
+        const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
+        const currentSpeed = baseSpeed / tempoFactor;
+        const startOffset = -LEAD_IN_SECONDS * currentSpeed;
+        
+        scrollOffsetRef.current = startOffset;
+        setScrollOffset(startOffset);
         lastFrameTimeRef.current = 0;
 
         // Clear all tracking
