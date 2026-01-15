@@ -1,6 +1,4 @@
-// javascript
-// File: src/components/ScoreRenderer.jsx
-import { Renderer, Stave, StaveNote, TickContext, Dot } from 'vexflow';
+import { Renderer, Stave, StaveNote, TickContext, Dot, Accidental } from 'vexflow';
 import { parsePitchToMidi, STRICT_WINDOW_SECONDS } from '../core/musicUtils';
 import { RENDERING, MIDI, COLORS, TIMING } from '../core/constants';
 import { beatsToVexDuration } from '../core/durationConverter';
@@ -11,7 +9,6 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         viewportWidth = RENDERING.VIEWPORT_WIDTH, 
         viewportHeight = RENDERING.VIEWPORT_HEIGHT, 
         pixelsPerBeat = RENDERING.PIXELS_PER_BEAT,
-        pixelsPerSecond = RENDERING.PIXELS_PER_SECOND, // Kept for legacy fallback if needed
         playheadX = RENDERING.PLAYHEAD_X, 
         minMidi = MIDI.MIN_MIDI, 
         maxMidi = MIDI.MAX_MIDI, 
@@ -19,7 +16,8 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         beatTolerance = TIMING.STRICT_BEAT_TOLERANCE
     } = opts;
 
-    // --- Static staves on the staves canvas (unchanging) ---
+    if (!viewportWidth || viewportWidth <= 0) return Promise.resolve();
+
     stavesCanvas.width = viewportWidth;
     stavesCanvas.height = viewportHeight;
     const stavesRenderer = new Renderer(stavesCanvas, Renderer.Backends.CANVAS);
@@ -31,171 +29,76 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     const trebleY = RENDERING.TREBLE_Y;
     const bassY = RENDERING.BASS_Y;
 
-    const trebleStave = new Stave(marginLeft, trebleY, staveWidth);
-    trebleStave.addClef("treble").addTimeSignature("4/4");
+    const trebleStave = new Stave(marginLeft, trebleY, staveWidth).addClef("treble").addTimeSignature("4/4");
     trebleStave.setContext(stavesCtx).draw();
-
-    const bassStave = new Stave(marginLeft, bassY, staveWidth);
-    bassStave.addClef("bass").addTimeSignature("4/4");
+    const bassStave = new Stave(marginLeft, bassY, staveWidth).addClef("bass").addTimeSignature("4/4");
     bassStave.setContext(stavesCtx).draw();
 
-    stavesCtx.beginPath();
-    stavesCtx.strokeStyle = COLORS.BLACK;
-    stavesCtx.lineWidth = RENDERING.STAVE_LINE_WIDTH;
-    stavesCtx.moveTo(marginLeft - RENDERING.STAVE_CONNECTOR_OFFSET, trebleY);
-    stavesCtx.lineTo(marginLeft - RENDERING.STAVE_CONNECTOR_OFFSET, bassY + RENDERING.STAVE_CONNECTOR_BASS_EXTRA);
-    stavesCtx.stroke();
-
-    // --- Determine Tempo and Time Signature for measure calculation ---
-    // Note: In Phase 1 we ensured every note has timeSec.
-    // We assume single tempo/timeSig for now as per plan.
     const tempo = opts.tempo || 60; 
     const beatsPerMeasure = opts.beatsPerMeasure || 4;
     const secPerBeat = TIMING.SECONDS_IN_MINUTE / tempo;
-    const secPerMeasure = beatsPerMeasure * secPerBeat;
 
-    // --- Filter timeline to the requested midi range ---
     const filteredTimeline = timeline.filter(ev => {
         const midi = (Number.isInteger(ev.midi) ? ev.midi : parsePitchToMidi(ev.pitch || ev.key || ''));
-        if (midi == null) return false; // drop events without a resolvable midi
-        return midi >= (Number.isFinite(minMidi) ? minMidi : MIDI.MIN_MIDI) && midi <= (Number.isFinite(maxMidi) ? maxMidi : MIDI.MAX_MIDI);
+        return midi != null && midi >= minMidi && midi <= maxMidi;
     });
 
-    // --- Notes canvas: size to timeline duration and draw notes at absolute X positions ---
-    const lastNote = filteredTimeline.length > 0 ? filteredTimeline[filteredTimeline.length - 1] : null;
-    // Calculate total beats (approximate from last note)
+    const lastNote = filteredTimeline[filteredTimeline.length - 1];
     const totalBeats = lastNote 
         ? ((lastNote.measure || 1) - 1) * beatsPerMeasure + ((lastNote.beat || 1) - 1) + (lastNote.beatFraction || 0) + (lastNote.durationBeats || 0)
-        : 0;
+        : 20;
 
-    notesCanvas.width = Math.max(RENDERING.MIN_NOTES_CANVAS_WIDTH, Math.ceil(totalBeats * pixelsPerBeat) + marginLeft + RENDERING.NOTES_CANVAS_RIGHT_PADDING);
+    notesCanvas.width = Math.max(2400, Math.ceil(totalBeats * pixelsPerBeat) + 500);
     notesCanvas.height = viewportHeight;
-
     const notesRenderer = new Renderer(notesCanvas, Renderer.Backends.CANVAS);
     const notesCtx = notesRenderer.getContext();
     notesCtx.clearRect(0, 0, notesCanvas.width, notesCanvas.height);
 
-    const notesStaveWidth = notesCanvas.width - marginLeft - RENDERING.STAVE_WIDTH_REDUCTION;
-    const notesTrebleStave = new Stave(marginLeft, trebleY, notesStaveWidth);
-    const notesBassStave = new Stave(marginLeft, bassY, notesStaveWidth);
+    const notesTrebleStave = new Stave(marginLeft, trebleY, notesCanvas.width - marginLeft);
     notesTrebleStave.setContext(notesCtx).draw();
+    const notesBassStave = new Stave(marginLeft, bassY, notesCanvas.width - marginLeft);
     notesBassStave.setContext(notesCtx).draw();
 
-    // compute initial lead so start===0 appears at playheadX
-    const vexFlowIntrinsicOffset = RENDERING.VEXFLOW_INTRINSIC_OFFSET;
     const initialLeadPixels = Math.max(0, playheadX - marginLeft);
 
-    // --- Draw Barlines ---
-    const numMeasures = Math.ceil(totalBeats / beatsPerMeasure) + 1;
-    
-    notesCtx.strokeStyle = COLORS.BLACK;
-    notesCtx.lineWidth = 1;
-    notesCtx.fillStyle = COLORS.BLACK;
-    notesCtx.font = "italic 12px serif";
-
-    for (let i = 0; i < numMeasures; i++) {
-        // Barline is at the start of measure i+1 (so i * beatsPerMeasure beats from start)
+    for (let i = 0; i < Math.ceil(totalBeats / beatsPerMeasure) + 1; i++) {
         const barX = marginLeft + (i * beatsPerMeasure * pixelsPerBeat) + initialLeadPixels - RENDERING.BARLINE_OFFSET_X;
-        
-        // Draw vertical barline across both staves
+        notesCtx.strokeStyle = "#000";
         notesCtx.beginPath();
         notesCtx.moveTo(barX, trebleY);
-        notesCtx.lineTo(barX, bassY + 80); // 80 is roughly the height of a stave
+        notesCtx.lineTo(barX, bassY + 80);
         notesCtx.stroke();
-
-        // Draw measure number
-        notesCtx.fillText(`${i + 1}`, barX + 5, trebleY - 5);
-    }
-
-    // split timeline into treble/bass using midi (prefer ev.midi when present)
-    const trebleItems = [];
-    const bassItems = [];
-    for (const ev of filteredTimeline) {
-        const midi = Number.isInteger(ev.midi) ? ev.midi : parsePitchToMidi(ev.pitch || ev.key || '');
-        if (midi >= MIDI.C4_MIDI) trebleItems.push(ev);
-        else bassItems.push(ev);
     }
 
     function makeVexNoteFrom(ev) {
         const raw = (ev.pitch || ev.key || '').toString().trim();
-        // Accept formats like: "C4", "C/4", "c4", "c/4", "C#4", "c#/4"
-        const m = raw.match(/^([A-Ga-g]#?)\/?(-?\d+)$/);
-        const step = m ? m[1].toLowerCase() : 'c';
-        const oct = m ? m[2] : '4';
+        const m = raw.match(/^([A-Ga-g])([#b]?)\/?(-?\d+)$/);
+        if (!m) return null;
         
-        // Use explicit durationBeats if available, otherwise estimate from duration in seconds (assuming 60bpm for legacy)
-        // If durationBeats is missing, we might assume 1 beat = 1 second for fallback, or just default to 1
-        const beats = ev.durationBeats || (ev.dur ? ev.dur / (60/60) : 1);
+        const step = m[1].toLowerCase();
+        const acc = m[2];
+        const oct = m[3];
+        const { duration, dots } = beatsToVexDuration(ev.durationBeats || 1);
         
-        const { duration, dots } = beatsToVexDuration(beats);
-        
-        const note = new StaveNote({ keys: [`${step}/${oct}`], duration: duration });
-        if (dots > 0) {
-            note.addModifier(new Dot(), 0);
-        }
+        const note = new StaveNote({ keys: [`${step}/${oct}`], duration });
+        if (dots > 0) note.addModifier(new Dot(), 0);
+        if (acc) note.addModifier(new Accidental(acc), 0);
         return note;
     }
 
-    // draw notes by forcing TickContext X from timeline start times + initial lead
-    const windowSeconds = beatTolerance * secPerBeat;
-    const windowPixels = windowSeconds * pixelsPerSecond;
-
-    for (const ev of trebleItems) {
+    for (const ev of filteredTimeline) {
+        const midi = Number.isInteger(ev.midi) ? ev.midi : parsePitchToMidi(ev.pitch || ev.key || '');
+        const targetStave = midi >= MIDI.C4_MIDI ? notesTrebleStave : notesBassStave;
         const note = makeVexNoteFrom(ev);
-        // logicX: Where the note SHOULD be visually to match the playhead at time t
-        const logicX = calculateNoteX(ev.measure || 1, ev.beat || 1, ev.beatFraction || 0, pixelsPerBeat, marginLeft, beatsPerMeasure) + initialLeadPixels;
-        
-        // vexX: Where we tell VexFlow to draw to achieve logicX (compensating for intrinsic offset)
-        const vexX = logicX - vexFlowIntrinsicOffset;
+        if (!note) continue;
 
-        // Debug: Draw validation window bars centered on Logic X
-        if (showValidTiming) {
-            notesCtx.fillStyle = COLORS.VALIDATION_GREEN;
-            notesCtx.fillRect(logicX - windowPixels, trebleY, windowPixels * 2, RENDERING.VALIDATION_WINDOW_HEIGHT);
-            notesCtx.fillStyle = COLORS.GREEN;
-            notesCtx.fillRect(logicX - windowPixels, trebleY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
-            notesCtx.fillRect(logicX + windowPixels, trebleY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
-        }
+        const logicX = calculateNoteX(ev.measure || 1, ev.beat || 1, ev.beatFraction || 0, pixelsPerBeat, marginLeft, beatsPerMeasure) + initialLeadPixels;
+        const vexX = logicX - RENDERING.VEXFLOW_INTRINSIC_OFFSET;
 
         const tc = new TickContext();
-        tc.setX(vexX);
-        tc.setPadding(0);
-        tc.addTickable(note);
-        tc.preFormat();
-        note.setTickContext(tc);
-
-        note.setStave(notesTrebleStave);
-        note.setContext(notesCtx);
-        note.draw(notesCtx, notesTrebleStave);
-    }
-
-    for (const ev of bassItems) {
-        const note = makeVexNoteFrom(ev);
-        // logicX: Where the note SHOULD be visually to match the playhead at time t
-        const logicX = calculateNoteX(ev.measure || 1, ev.beat || 1, ev.beatFraction || 0, pixelsPerBeat, marginLeft, beatsPerMeasure) + initialLeadPixels;
-        
-        // vexX: Where we tell VexFlow to draw to achieve logicX (compensating for intrinsic offset)
-        const vexX = logicX - vexFlowIntrinsicOffset;
-
-        // Debug: Draw validation window bars centered on Logic X
-        if (showValidTiming) {
-            notesCtx.fillStyle = COLORS.VALIDATION_GREEN;
-            notesCtx.fillRect(logicX - windowPixels, bassY, windowPixels * 2, RENDERING.VALIDATION_WINDOW_HEIGHT);
-            notesCtx.fillStyle = COLORS.GREEN;
-            notesCtx.fillRect(logicX - windowPixels, bassY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
-            notesCtx.fillRect(logicX + windowPixels, bassY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
-        }
-
-        const tc = new TickContext();
-        tc.setX(vexX);
-        tc.setPadding(0);
-        tc.addTickable(note);
-        tc.preFormat();
-        note.setTickContext(tc);
-
-        note.setStave(notesBassStave);
-        note.setContext(notesCtx);
-        note.draw(notesCtx, notesBassStave);
+        tc.addTickable(note).preFormat().setX(vexX);
+        note.setContext(notesCtx).setStave(targetStave);
+        note.draw();
     }
 
     return Promise.resolve();
