@@ -59,6 +59,7 @@ export default function App() {
     const [includeSharps, setIncludeSharps] = useState(false);
     const [showValidTiming, setShowValidTiming] = useState(false);
     const [beatTolerance, setBeatTolerance] = useState(0.1);
+    const [validateNoteLength, setValidateNoteLength] = useState(false);
     const [enabledDurations, setEnabledDurations] = useState({
         whole: false,
         half: false,
@@ -69,6 +70,8 @@ export default function App() {
 
     const [mode, setMode] = useState('practice'); 
     const [lessonMeta, setLessonMeta] = useState({ tempo: 80, beatsPerMeasure: 4 });
+
+    const activeMatchesRef = useRef(new Map()); // midi -> { index, startBeat, durationBeats }
 
     const renderCurrentTimeline = () => {
         if (!stavesRef.current || !notesRef.current || !timelineRef.current) return;
@@ -181,13 +184,20 @@ export default function App() {
                 });
 
                 if (candidates.length === 0) {
-                    if (allCandidates.length === 0) setLog(l => [...l, `No expected note near t=${playTime.toFixed(2)}s`]);
+                    setLog(l => [...l, `❌ Extra/Misplaced: played ${note} at ${currentBeat.toFixed(2)}b`]);
+                    flashPlayhead('red');
                     return;
                 }
 
                 const exact = candidates.find(c => Number.isInteger(c.ev.midi) && c.ev.midi === note && c.d <= strictWindowSec);
                 if (exact) {
                     validatedNotesRef.current.set(exact.index, now);
+                    activeMatchesRef.current.set(note, { 
+                        index: exact.index, 
+                        startBeat: currentBeat, 
+                        durationBeats: exact.ev.durationBeats 
+                    });
+                    
                     const key = exact.ev.vfKey || exact.ev.pitch || `midi:${exact.ev.midi}`;
                     const diffBeats = exact.d / secPerBeat;
                     setLog(l => [...l, `✅ Correct: ${key} (dt=${diffBeats.toFixed(2)} beats)`]);
@@ -203,6 +213,28 @@ export default function App() {
             onNoteOff: (pitch, note) => {
                 audioSynth.stopNote(note);
                 setLog(l => [...l, `noteOff ${pitch} (${note})`]);
+
+                if (pausedRef.current) return;
+
+                const match = activeMatchesRef.current.get(note);
+                if (match && validateNoteLength) {
+                    const currentBeat = scrollOffsetRef.current / RENDERING.PIXELS_PER_BEAT;
+                    const heldBeats = currentBeat - match.startBeat;
+                    const expected = match.durationBeats;
+                    
+                    // Tolerance for release: 0.2 beats or 20% of note length, whichever is larger
+                    const tolerance = Math.max(0.2, expected * 0.2);
+                    const diff = Math.abs(heldBeats - expected);
+
+                    if (diff <= tolerance) {
+                        setLog(l => [...l, `✨ Perfect Release! Held ${heldBeats.toFixed(2)}b (target ${expected}b)`]);
+                    } else if (heldBeats < expected) {
+                        setLog(l => [...l, `⚠️ Released Early: Held ${heldBeats.toFixed(2)}b (target ${expected}b)`]);
+                    } else {
+                        setLog(l => [...l, `⚠️ Held Too Long: Held ${heldBeats.toFixed(2)}b (target ${expected}b)`]);
+                    }
+                }
+                activeMatchesRef.current.delete(note);
             },
             onLog: (message) => setLog(l => [...l, message]),
             onReady: (isReady) => setMidiSupported(isReady)
@@ -577,10 +609,17 @@ export default function App() {
                                         </div>
                                     </div>
 
-                                    <label className="flex items-center gap-4 p-4 bg-gray-50 rounded-3xl hover:bg-gray-100 transition-colors cursor-pointer border-2 border-transparent hover:border-white">
-                                        <input type="checkbox" checked={includeSharps} onChange={(e) => setIncludeSharps(e.target.checked)} className="w-6 h-6 accent-brand-secondary rounded-lg" />
-                                        <span className="font-black text-gray-600 text-xs uppercase tracking-widest">Sharps</span>
-                                    </label>
+                                    <div className="space-y-3">
+                                        <label className="flex items-center gap-4 p-4 bg-gray-50 rounded-3xl hover:bg-gray-100 transition-colors cursor-pointer border-2 border-transparent hover:border-white">
+                                            <input type="checkbox" checked={includeSharps} onChange={(e) => setIncludeSharps(e.target.checked)} className="w-6 h-6 accent-brand-secondary rounded-lg" />
+                                            <span className="font-black text-gray-600 text-xs uppercase tracking-widest">Sharps</span>
+                                        </label>
+
+                                        <label className="flex items-center gap-4 p-4 bg-gray-50 rounded-3xl hover:bg-gray-100 transition-colors cursor-pointer border-2 border-transparent hover:border-white">
+                                            <input type="checkbox" checked={validateNoteLength} onChange={(e) => setValidateNoteLength(e.target.checked)} className="w-6 h-6 accent-brand-accent rounded-lg" />
+                                            <span className="font-black text-gray-600 text-xs uppercase tracking-widest">Validate Hold</span>
+                                        </label>
+                                    </div>
 
                                     <button 
                                         onClick={() => loadTimeline()}
