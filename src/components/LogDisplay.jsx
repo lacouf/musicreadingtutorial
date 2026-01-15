@@ -11,11 +11,16 @@ export default function LogDisplay({ log }) {
     }, [log]);
 
     return (
-        <div style={{ marginTop: 10 }}>
-            <h4>Log</h4>
-            <div ref={logContainerRef} style={{ maxHeight: 200, overflow: 'auto', background: '#fafafa', padding: 8 }}>
-                {log.map((l, i) => <div key={i}><code>{l}</code></div>)}
-            </div>
+        <div 
+            ref={logContainerRef} 
+            className="h-32 overflow-y-auto bg-white border border-gray-200 rounded-lg p-3 font-mono text-xs text-gray-600 shadow-inner"
+        >
+            {log.length === 0 && <div className="text-gray-400 italic">No events yet...</div>}
+            {log.map((l, i) => (
+                <div key={i} className="border-b border-gray-50 last:border-0 py-0.5">
+                    {l}
+                </div>
+            ))}
         </div>
     );
 }

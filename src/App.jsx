@@ -6,7 +6,6 @@ import { renderScoreToCanvases } from './components/ScoreRenderer';
 import { initializeMidi } from './midi/MidiInput';
 import { exampleJSONLesson, exampleMusicXML, parseTimeline } from './parser/TimeLineParser';
 import LogDisplay from './components/LogDisplay';
-import LessonDisplay from './components/LessonDisplay';
 import { audioSynth } from './audio/AudioSynth';
 import { parsePitchToMidi, midiToVexKey } from './core/musicUtils';
 import { generateRandomTimeline } from './core/NoteGenerator';
@@ -328,14 +327,6 @@ export default function App() {
             const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
             const currentSpeed = baseSpeed / tempoFactor;
             
-            // We can't just multiply totalTime * speed because speed might have changed.
-            // We should integrate delta: offset += delta * speed.
-            // However, the current code uses `totalActiveTimeRef.current * PIXELS_PER_SECOND / tempoFactor`.
-            // This implies current code DOES NOT handle tempo changes correctly (it jumps).
-            // We should switch to integration for smooth transitions, but strict refactoring first:
-            // Let's stick to the current pattern but use the new speed formula if possible, 
-            // OR switch to delta integration which is robust for tempo changes.
-            
             // Switch to Delta Integration:
             const deltaScroll = deltaTime * currentSpeed;
             const newScrollOffset = scrollOffsetRef.current + deltaScroll;
@@ -411,222 +402,240 @@ export default function App() {
     const circleSize = 18;
 
     return (
-        <div style={{ fontFamily: 'sans-serif', padding: 12 }}>
-            <h2>Music Tutorial — Minimal Starter</h2>
-            <p>Open this page in Chrome. Connect a MIDI keyboard (USB). The score scrolls left; play notes at the red playhead.</p>
-
-            <div 
-                ref={containerRef} 
-                style={{ 
-                    border: '1px solid #ccc', 
-                    width: viewportWidth, 
-                    maxWidth: '100%', 
-                    height: viewportHeight, 
-                    overflow: 'hidden', 
-                    position: 'relative',
-                    resize: 'horizontal', 
-                    minWidth: '300px'
-                }}
-            >
-                <ScrollingCanvas
-                    stavesCanvas={stavesRef.current}
-                    notesCanvas={notesRef.current}
-                    viewportWidth={viewportWidth}
-                    viewportHeight={viewportHeight}
-                    scrollOffset={scrollOffset}
-                    playheadX={playheadX}
-                    playheadFlash={playheadFlash}
-                    renderTrigger={renderTrigger}
-                />
-
-                {/* pulse overlay centered on the playhead - purely visual (pointer-events: none) */}
-                <div
-                    aria-hidden
-                    style={{
-                        position: 'absolute',
-                        left: Math.max(0, playheadX - overlayWidth / 2),
-                        top: 0,
-                        width: overlayWidth,
-                        height: viewportHeight,
-                        pointerEvents: 'none',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 10
-                    }}
-                >
-                    <div
-                        style={{
-                            width: circleSize,
-                            height: circleSize,
-                            borderRadius: '50%',
-                            background: pulseActive ? pulseColor : 'transparent',
-                            transform: pulseActive ? 'scale(2.6)' : 'scale(1)',
-                            opacity: pulseActive ? 0.85 : 0,
-                            transition: 'transform 200ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease-out',
-                            boxShadow: pulseActive ? `0 0 24px ${pulseColor}` : 'none'
-                        }}
-                    />
+        <div className="min-h-screen bg-brand-bg font-sans pb-10">
+            {/* Navbar */}
+            <nav className="bg-brand-primary text-white p-4 shadow-md sticky top-0 z-50">
+                <div className="max-w-4xl mx-auto flex items-center justify-between">
+                    <h1 className="text-2xl font-bold font-comic tracking-wide flex items-center gap-2">
+                        🎵 Music Tutor
+                    </h1>
+                    <div className="text-sm bg-violet-700 px-3 py-1 rounded-full">
+                        {midiSupported ? '🎹 MIDI Ready' : '🔌 Connect MIDI'}
+                    </div>
                 </div>
-            </div>
+            </nav>
 
-            <div style={{ marginTop: 8 }}>
-                <strong>MIDI supported:</strong> {midiSupported ? 'Yes' : 'No or not yet initialized'}
-            </div>
+            <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
+                
+                {/* Mode Selection Tabs */}
+                <div className="bg-white p-2 rounded-2xl shadow-sm inline-flex gap-2">
+                    <button 
+                        onClick={() => setMode('practice')}
+                        className={`px-6 py-2 rounded-xl transition-all font-bold ${
+                            mode === 'practice' 
+                                ? 'bg-brand-secondary text-white shadow-md' 
+                                : 'text-gray-500 hover:bg-gray-100'
+                        }`}
+                    >
+                        Random Practice
+                    </button>
+                    <button 
+                        onClick={() => setMode('lesson')}
+                        className={`px-6 py-2 rounded-xl transition-all font-bold ${
+                            mode === 'lesson' 
+                                ? 'bg-brand-secondary text-white shadow-md' 
+                                : 'text-gray-500 hover:bg-gray-100'
+                        }`}
+                    >
+                        Lesson Mode
+                    </button>
+                </div>
 
-            <div style={{ marginTop: 10 }}>
-                <div style={{ display: 'flex', gap: '20px', marginBottom: 12 }}>
-                    {/* Practice Mode Box */}
-                    <div style={{ 
-                        border: '1px solid #ddd', 
-                        padding: '12px', 
-                        borderRadius: '8px', 
-                        backgroundColor: '#f9f9f9',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px'
-                    }}>
-                        <button 
-                            onClick={() => setMode('practice')} 
-                            style={{ 
-                                padding: '8px 16px', 
-                                fontWeight: mode === 'practice' ? 'bold' : 'normal',
-                                backgroundColor: mode === 'practice' ? '#007bff' : '#efefef',
-                                color: mode === 'practice' ? 'white' : 'black',
-                                border: '1px solid #ccc',
-                                borderRadius: '4px',
-                                cursor: 'pointer'
+                {/* Score Canvas Container */}
+                <div className="bg-white rounded-3xl shadow-xl overflow-hidden border-4 border-white ring-1 ring-gray-100">
+                    <div 
+                        ref={containerRef} 
+                        style={{ 
+                            width: viewportWidth, 
+                            maxWidth: '100%', 
+                            height: viewportHeight, 
+                            overflow: 'hidden', 
+                            position: 'relative',
+                            resize: 'horizontal', 
+                            minWidth: '300px'
+                        }}
+                        className="bg-white"
+                    >
+                        <ScrollingCanvas
+                            stavesCanvas={stavesRef.current}
+                            notesCanvas={notesRef.current}
+                            viewportWidth={viewportWidth}
+                            viewportHeight={viewportHeight}
+                            scrollOffset={scrollOffset}
+                            playheadX={playheadX}
+                            playheadFlash={playheadFlash}
+                            renderTrigger={renderTrigger}
+                        />
+
+                        {/* Pulse Overlay */}
+                        <div
+                            aria-hidden
+                            style={{
+                                position: 'absolute',
+                                left: Math.max(0, playheadX - overlayWidth / 2),
+                                top: 0,
+                                width: overlayWidth,
+                                height: viewportHeight,
+                                pointerEvents: 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 10
                             }}
                         >
-                            Random Practice Mode
-                        </button>
+                            <div
+                                style={{
+                                    width: circleSize,
+                                    height: circleSize,
+                                    borderRadius: '50%',
+                                    background: pulseActive ? pulseColor : 'transparent',
+                                    transform: pulseActive ? 'scale(2.6)' : 'scale(1)',
+                                    opacity: pulseActive ? 0.85 : 0,
+                                    transition: 'transform 200ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease-out',
+                                    boxShadow: pulseActive ? `0 0 24px ${pulseColor}` : 'none'
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Controls Area */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    {/* Left Column: Playback Controls */}
+                    <div className="bg-white p-6 rounded-2xl shadow-lg space-y-4 border border-gray-100">
+                        <h3 className="text-lg font-bold text-gray-700">Playback Controls</h3>
                         
-                        {mode === 'practice' && (
-                            <>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={togglePause} 
+                                className={`flex-1 py-3 font-bold rounded-xl transition-colors shadow-sm ${
+                                    paused 
+                                        ? 'bg-green-500 hover:bg-green-600 text-white' 
+                                        : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                                }`}
+                            >
+                                {paused ? '▶ Resume' : '⏸ Pause'}
+                            </button>
+                            <button 
+                                onClick={restart} 
+                                className="px-6 py-3 font-bold bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl transition-colors shadow-sm"
+                            >
+                                ↺ Restart
+                            </button>
+                        </div>
+
+                        <div className="space-y-3 pt-2">
+                            <label className="flex flex-col gap-1">
+                                <span className="text-sm font-semibold text-gray-500 flex justify-between">
+                                    <span>Tempo Scale</span>
+                                    <span className="text-brand-primary">{tempoFactor.toFixed(1)}x</span>
+                                </span>
+                                <input
+                                    type="range"
+                                    min="0.5"
+                                    max="3.0"
+                                    step="0.1"
+                                    value={tempoFactor}
+                                    onChange={(e) => setTempoFactor(Number(e.target.value))}
+                                    className="w-full accent-brand-primary h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                />
+                            </label>
+
+                            <label className="flex flex-col gap-1">
+                                <span className="text-sm font-semibold text-gray-500">Volume</span>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.05"
+                                    defaultValue="0.3"
+                                    onChange={(e) => audioSynth.setVolume(Number(e.target.value))}
+                                    className="w-full accent-brand-secondary h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                />
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Right Column: Mode Settings */}
+                    <div className="bg-white p-6 rounded-2xl shadow-lg space-y-4 border border-gray-100">
+                        <h3 className="text-lg font-bold text-gray-700">
+                            {mode === 'practice' ? 'Practice Settings' : 'Lesson Info'}
+                        </h3>
+
+                        {mode === 'practice' ? (
+                            <div className="space-y-4">
+                                <div className="flex gap-2">
+                                    <label className="flex-1">
+                                        <span className="text-xs font-bold text-gray-400 uppercase">Min Note</span>
+                                        <input 
+                                            value={minNote} 
+                                            onChange={(e) => setMinNote(e.target.value)}
+                                            className="w-full mt-1 p-2 bg-gray-50 border border-gray-200 rounded-lg text-center font-bold focus:ring-2 focus:ring-brand-primary outline-none" 
+                                        />
+                                    </label>
+                                    <label className="flex-1">
+                                        <span className="text-xs font-bold text-gray-400 uppercase">Max Note</span>
+                                        <input 
+                                            value={maxNote} 
+                                            onChange={(e) => setMaxNote(e.target.value)}
+                                            className="w-full mt-1 p-2 bg-gray-50 border border-gray-200 rounded-lg text-center font-bold focus:ring-2 focus:ring-brand-primary outline-none" 
+                                        />
+                                    </label>
+                                </div>
+
+                                <div className="flex flex-col gap-2">
+                                    <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={includeSharps} 
+                                            onChange={(e) => setIncludeSharps(e.target.checked)}
+                                            className="w-5 h-5 accent-brand-primary rounded"
+                                        />
+                                        <span className="font-medium text-gray-700">Include Sharps (Black Keys)</span>
+                                    </label>
+                                    
+                                    <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={showValidTiming} 
+                                            onChange={(e) => setShowValidTiming(e.target.checked)}
+                                            className="w-5 h-5 accent-brand-primary rounded"
+                                        />
+                                        <span className="font-medium text-gray-700">Show Valid Timing Window</span>
+                                    </label>
+                                </div>
+
                                 <button 
                                     onClick={() => loadTimeline()}
-                                    style={{ 
-                                        padding: '8px 16px', 
-                                        backgroundColor: '#e0ffe0',
-                                        border: '1px solid #99cc99',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer'
-                                    }}
+                                    className="w-full py-3 font-bold bg-brand-primary hover:bg-violet-700 text-white rounded-xl transition-colors shadow-md"
                                 >
-                                    Generate New Exercise
+                                    ✨ Generate New Exercise
                                 </button>
-                                
-                                <label style={{ fontSize: '0.9rem' }}>
+                            </div>
+                        ) : (
+                            <div className="space-y-4 text-gray-600">
+                                <p>Playing: <strong>{exampleJSONLesson.title}</strong></p>
+                                <p className="text-sm">Follow the score and play along. The lesson starts with single notes and progresses to chords.</p>
+                                <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer border border-gray-100">
                                     <input 
                                         type="checkbox" 
-                                        checked={includeSharps} 
-                                        onChange={(e) => setIncludeSharps(e.target.checked)} 
+                                        checked={showValidTiming} 
+                                        onChange={(e) => setShowValidTiming(e.target.checked)}
+                                        className="w-5 h-5 accent-brand-primary rounded"
                                     />
-                                    <span style={{ marginLeft: 4 }}>Include Sharps</span>
+                                    <span className="font-medium text-gray-700">Show Valid Timing Window</span>
                                 </label>
-                            </>
+                            </div>
                         )}
                     </div>
-
-                    {/* Lesson Mode Box */}
-                    <div style={{ 
-                        border: '1px solid #ddd', 
-                        padding: '12px', 
-                        borderRadius: '8px', 
-                        backgroundColor: '#f9f9f9',
-                        display: 'flex',
-                        flexDirection: 'column'
-                    }}>
-                        <button 
-                            onClick={() => setMode('lesson')} 
-                            style={{ 
-                                padding: '8px 16px', 
-                                fontWeight: mode === 'lesson' ? 'bold' : 'normal',
-                                backgroundColor: mode === 'lesson' ? '#007bff' : '#efefef',
-                                color: mode === 'lesson' ? 'white' : 'black',
-                                border: '1px solid #ccc',
-                                borderRadius: '4px',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            Lesson Mode
-                        </button>
-                    </div>
                 </div>
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'center', marginBottom: 15 }}>
-                    <label>
-                        Min note:
-                        <input style={{ marginLeft: 8, width: '50px' }} value={minNote} onChange={(e) => setMinNote(e.target.value)} />
-                    </label>
-
-                    <label>
-                        Max note:
-                        <input style={{ marginLeft: 8, width: '50px' }} value={maxNote} onChange={(e) => setMaxNote(e.target.value)} />
-                    </label>
-
-                    <label>
-                        <input 
-                            type="checkbox" 
-                            checked={showValidTiming} 
-                            onChange={(e) => setShowValidTiming(e.target.checked)} 
-                        />
-                        <span style={{ marginLeft: 4 }}>Show Valid Timing</span>
-                    </label>
+                {/* Debug / Info Section (Collapsible or reduced) */}
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                    <h4 className="font-bold text-gray-500 text-sm uppercase mb-2">Debug Log</h4>
+                    <LogDisplay log={log} />
                 </div>
-
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <button onClick={togglePause} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-                        {paused ? 'Resume Scrolling' : 'Pause Scrolling'}
-                    </button>
-
-                    <button onClick={restart} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-                        Restart
-                    </button>
-                </div>
-
-                {/* simple tempo control: increase tempoFactor to slow playback */}
-                <label style={{ marginLeft: 12 }}>
-                    Tempo scale:
-                    <input
-                        type="range"
-                        min="0.5"
-                        max="3.0"
-                        step="0.1"
-                        value={tempoFactor}
-                        onChange={(e) => setTempoFactor(Number(e.target.value))}
-                        style={{ marginLeft: 8, verticalAlign: 'middle' }}
-                    />
-                    <span style={{ marginLeft: 8 }}>{tempoFactor.toFixed(1)}x</span>
-                </label>
-
-                {/* volume control */}
-                <label style={{ marginLeft: 12 }}>
-                    Volume:
-                    <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        defaultValue="0.3"
-                        onChange={(e) => audioSynth.setVolume(Number(e.target.value))}
-                        style={{ marginLeft: 8, verticalAlign: 'middle' }}
-                    />
-                </label>
-            </div>
-
-            <LessonDisplay jsonLesson={exampleJSONLesson} musicXmlLesson={exampleMusicXML} />
-            <LogDisplay log={log} />
-
-            <div style={{ marginTop: 12 }}>
-                <h4>Next steps (suggested)</h4>
-                <ol>
-                    <li>Map MusicXML durations and beaming precisely to VexFlow note durations.</li>
-                    <li>Implement precise timing: map score beat \-\> px so tempo changes affect speed correctly.</li>
-                    <li>Improve timeline-event matching with quantization and per-note windows.</li>
-                    <li>Add UI to select MIDI input device and tempo control.</li>
-                    <li>Support multi-voice scores and right/left-hand highlighting.</li>
-                </ol>
             </div>
         </div>
     );
