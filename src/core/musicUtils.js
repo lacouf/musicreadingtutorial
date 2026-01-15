@@ -24,6 +24,10 @@ export function parsePitchToMidi(pitchStr) {
 
     if (accidental === '#') {
         // stay same (handled by NOTES_NAMES containing sharps)
+        // Correction: The regex splits the letter and the accidental.
+        // 'C' is index 0. 'C#' is index 1.
+        // So if we have 'C' and '#', we need to increment the index found for 'C'.
+        stepIndex++;
     } else if (accidental === 'B') {
         stepIndex = (stepIndex - 1 + 12) % 12;
     }

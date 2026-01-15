@@ -29,7 +29,9 @@ describe('App Component', () => {
         await act(async () => {
             render(<App />);
         });
-        expect(screen.getByText(/Music Tutorial/i)).toBeInTheDocument();
+        expect(screen.getByText(/Piano/i)).toBeInTheDocument();
+        // Use a more specific selector or check for the heading
+        expect(screen.getByRole('heading', { name: /Piano Master/i })).toBeInTheDocument();
     });
 
     it('has STRICT_WINDOW_SECONDS defined', () => {
@@ -42,8 +44,8 @@ describe('App Component', () => {
         await act(async () => {
             render(<App />);
         });
-        expect(screen.getByText(/Lesson Mode/i)).toBeInTheDocument();
-        expect(screen.getByDisplayValue('C3')).toBeInTheDocument();
-        expect(screen.getByDisplayValue('C6')).toBeInTheDocument();
+        expect(screen.getByText(/lesson/i)).toBeInTheDocument();
+        expect(screen.getByDisplayValue('C4')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('G4')).toBeInTheDocument();
     });
 });

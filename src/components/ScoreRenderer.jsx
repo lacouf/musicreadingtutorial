@@ -40,7 +40,11 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
 
     const filteredTimeline = timeline.filter(ev => {
         const midi = (Number.isInteger(ev.midi) ? ev.midi : parsePitchToMidi(ev.pitch || ev.key || ''));
-        return midi != null && midi >= minMidi && midi <= maxMidi;
+        if (midi == null || midi < minMidi || midi > maxMidi) {
+            // console.log('Dropped event:', ev, 'Midi:', midi);
+            return false;
+        }
+        return true;
     });
 
     const lastNote = filteredTimeline[filteredTimeline.length - 1];
@@ -71,46 +75,88 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         notesCtx.stroke();
     }
 
-    function makeVexNoteFrom(ev) {
-        const raw = (ev.pitch || ev.key || '').toString().trim();
-        const m = raw.match(/^([A-Ga-g])([#b]?)\/?(-?\d+)$/);
-        if (!m) return null;
-        
-        const step = m[1].toLowerCase();
-        const acc = m[2];
-        const oct = m[3];
-        const { duration, dots } = beatsToVexDuration(ev.durationBeats || 1);
-        
-        const note = new StaveNote({ keys: [`${step}/${oct}`], duration });
-        if (dots > 0) note.addModifier(new Dot(), 0);
-        if (acc) note.addModifier(new Accidental(acc), 0);
-        return note;
+    // Group events by start time to form chords
+    const groupedEvents = new Map();
+    for (const ev of filteredTimeline) {
+        // Use a key based on time to group simultaneous notes
+        // Using measure+beat+beatFraction is robust
+        const timeKey = `${ev.measure}-${ev.beat}-${ev.beatFraction}`;
+        if (!groupedEvents.has(timeKey)) {
+            groupedEvents.set(timeKey, []);
+        }
+        groupedEvents.get(timeKey).push(ev);
     }
 
-    for (const ev of filteredTimeline) {
-        const midi = Number.isInteger(ev.midi) ? ev.midi : parsePitchToMidi(ev.pitch || ev.key || '');
-        const isTreble = midi >= MIDI.C4_MIDI;
-        const targetStave = isTreble ? notesTrebleStave : notesBassStave;
-        const staveY = isTreble ? trebleY : bassY;
-        const note = makeVexNoteFrom(ev);
-        if (!note) continue;
+    // Process each group
+    for (const [key, group] of groupedEvents) {
+        if (group.length === 0) continue;
 
-        const logicX = calculateNoteX(ev.measure || 1, ev.beat || 1, ev.beatFraction || 0, pixelsPerBeat, marginLeft, beatsPerMeasure) + initialLeadPixels;
+        // Representative event for positioning (all events in group share time)
+        const leadEv = group[0];
         
-        if (showValidTiming) {
-            notesCtx.fillStyle = COLORS.VALIDATION_GREEN;
-            notesCtx.fillRect(logicX - windowPixels, staveY, windowPixels * 2, RENDERING.VALIDATION_WINDOW_HEIGHT);
-            notesCtx.fillStyle = COLORS.GREEN;
-            notesCtx.fillRect(logicX - windowPixels, staveY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
-            notesCtx.fillRect(logicX + windowPixels, staveY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
+        // Split into treble and bass notes
+        const trebleNotes = [];
+        const bassNotes = [];
+
+        for (const ev of group) {
+            const midi = Number.isInteger(ev.midi) ? ev.midi : parsePitchToMidi(ev.pitch || ev.key || '');
+            if (midi >= MIDI.C4_MIDI) trebleNotes.push(ev);
+            else bassNotes.push(ev);
         }
 
+        const logicX = calculateNoteX(leadEv.measure || 1, leadEv.beat || 1, leadEv.beatFraction || 0, pixelsPerBeat, marginLeft, beatsPerMeasure) + initialLeadPixels;
         const vexX = logicX - RENDERING.VEXFLOW_INTRINSIC_OFFSET;
 
-        const tc = new TickContext();
-        tc.addTickable(note).preFormat().setX(vexX);
-        note.setContext(notesCtx).setStave(targetStave);
-        note.draw();
+        // Helper to draw a chord (or single note) on a stave
+        const drawChord = (items, stave, staveY) => {
+            if (items.length === 0) return;
+            
+            // Assume all notes in chord have same duration (take from first)
+            const { duration, dots } = beatsToVexDuration(items[0].durationBeats || 1);
+            
+            const keys = [];
+            const modifiers = [];
+
+            items.forEach((ev, index) => {
+                const raw = (ev.pitch || ev.key || '').toString().trim();
+                const m = raw.match(/^([A-Ga-g])([#b]?)\/?(-?\d+)$/);
+                if (m) {
+                    const step = m[1].toLowerCase();
+                    const acc = m[2];
+                    const oct = m[3];
+                    keys.push(`${step}/${oct}`);
+                    if (acc) {
+                        modifiers.push({ index, type: acc });
+                    }
+                }
+            });
+
+            if (keys.length === 0) return;
+
+            const note = new StaveNote({ keys, duration });
+            if (dots > 0) note.addModifier(new Dot(), 0); // Dot applies to all? VexFlow usually handles dots per note or for the whole chord. With StaveNote, one dot is usually enough for simple chords.
+
+            modifiers.forEach(mod => {
+                note.addModifier(new Accidental(mod.type), mod.index);
+            });
+
+            // Draw validation window for this chord position
+            if (showValidTiming) {
+                notesCtx.fillStyle = COLORS.VALIDATION_GREEN;
+                notesCtx.fillRect(logicX - windowPixels, staveY, windowPixels * 2, RENDERING.VALIDATION_WINDOW_HEIGHT);
+                notesCtx.fillStyle = COLORS.GREEN;
+                notesCtx.fillRect(logicX - windowPixels, staveY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
+                notesCtx.fillRect(logicX + windowPixels, staveY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
+            }
+
+            const tc = new TickContext();
+            tc.addTickable(note).preFormat().setX(vexX);
+            note.setContext(notesCtx).setStave(stave);
+            note.draw();
+        };
+
+        drawChord(trebleNotes, notesTrebleStave, trebleY);
+        drawChord(bassNotes, notesBassStave, bassY);
     }
 
     return Promise.resolve();
