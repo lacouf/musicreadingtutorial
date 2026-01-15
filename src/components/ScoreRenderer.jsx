@@ -15,7 +15,8 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         playheadX = RENDERING.PLAYHEAD_X, 
         minMidi = MIDI.MIN_MIDI, 
         maxMidi = MIDI.MAX_MIDI, 
-        showValidTiming = false 
+        showValidTiming = false,
+        beatTolerance = TIMING.STRICT_BEAT_TOLERANCE
     } = opts;
 
     // --- Static staves on the staves canvas (unchanging) ---
@@ -136,7 +137,7 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     }
 
     // draw notes by forcing TickContext X from timeline start times + initial lead
-    const windowSeconds = TIMING.STRICT_BEAT_TOLERANCE * secPerBeat;
+    const windowSeconds = beatTolerance * secPerBeat;
     const windowPixels = windowSeconds * pixelsPerSecond;
 
     for (const ev of trebleItems) {

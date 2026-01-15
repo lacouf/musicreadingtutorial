@@ -58,6 +58,7 @@ export default function App() {
     const [maxNote, setMaxNote] = useState('G4');
     const [includeSharps, setIncludeSharps] = useState(false);
     const [showValidTiming, setShowValidTiming] = useState(false);
+    const [beatTolerance, setBeatTolerance] = useState(TIMING.STRICT_BEAT_TOLERANCE);
 
     const [mode, setMode] = useState('practice'); 
     const [lessonMeta, setLessonMeta] = useState({ tempo: 80, beatsPerMeasure: 4 });
@@ -72,7 +73,8 @@ export default function App() {
             pixelsPerBeat: RENDERING.PIXELS_PER_BEAT,
             playheadX, minMidi, maxMidi, showValidTiming,
             tempo: lessonMeta.tempo,
-            beatsPerMeasure: lessonMeta.beatsPerMeasure
+            beatsPerMeasure: lessonMeta.beatsPerMeasure,
+            beatTolerance: beatTolerance
         })
             .then(() => setRenderTrigger(t => t + 1))
             .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
@@ -151,7 +153,7 @@ export default function App() {
                 const secPerBeat = TIMING.SECONDS_IN_MINUTE / lessonMeta.tempo;
                 const playTime = currentBeat * secPerBeat;
                 const windowSec = TIMING.WIDE_BEAT_TOLERANCE * secPerBeat;
-                const strictWindowSec = TIMING.STRICT_BEAT_TOLERANCE * secPerBeat;
+                const strictWindowSec = beatTolerance * secPerBeat;
 
                 cleanupValidatedNotes(now);
                 const allCandidates = findEventsInWindow(playTime, windowSec);
@@ -214,7 +216,7 @@ export default function App() {
     }, []);
 
     useEffect(() => { loadTimeline(); }, [mode, minNote, maxNote, includeSharps]);
-    useEffect(() => { renderCurrentTimeline(); }, [viewportWidth, showValidTiming, lessonMeta]);
+    useEffect(() => { renderCurrentTimeline(); }, [viewportWidth, showValidTiming, lessonMeta, beatTolerance]);
 
     useEffect(() => {
         if (paused) {
@@ -538,10 +540,23 @@ export default function App() {
                                     Dev Terminal
                                 </h3>
                                 <div className="flex items-center gap-6">
-                                    <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={showValidTiming} onChange={(e) => setShowValidTiming(e.target.checked)} className="w-4 h-4 accent-green-500" />
-                                        <span className="text-[10px] font-black text-gray-400 uppercase">Draw Hitboxes</span>
-                                    </label>
+                                    <div className="flex flex-col gap-1">
+                                        <label className="flex items-center gap-3 cursor-pointer">
+                                            <input type="checkbox" checked={showValidTiming} onChange={(e) => setShowValidTiming(e.target.checked)} className="w-4 h-4 accent-green-500" />
+                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Draw Hitboxes</span>
+                                        </label>
+                                        {showValidTiming && (
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="range" min="0.01" max="0.40" step="0.01" 
+                                                    value={beatTolerance} 
+                                                    onChange={(e) => setBeatTolerance(Number(e.target.value))}
+                                                    className="w-32 h-1 accent-green-500 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                                />
+                                                <span className="text-[9px] font-bold text-green-600 w-8">{beatTolerance.toFixed(2)}b</span>
+                                            </div>
+                                        )}
+                                    </div>
                                     <button onClick={() => setLog([])} className="text-[10px] font-black text-red-400 hover:text-red-600 bg-red-50 px-3 py-1 rounded-lg transition-colors">CLEAR LOG</button>
                                 </div>
                             </div>
