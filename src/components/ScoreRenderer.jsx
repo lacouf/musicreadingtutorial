@@ -60,6 +60,7 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     notesBassStave.setContext(notesCtx).draw();
 
     const initialLeadPixels = Math.max(0, playheadX - marginLeft);
+    const windowPixels = beatTolerance * pixelsPerBeat;
 
     for (let i = 0; i < Math.ceil(totalBeats / beatsPerMeasure) + 1; i++) {
         const barX = marginLeft + (i * beatsPerMeasure * pixelsPerBeat) + initialLeadPixels - RENDERING.BARLINE_OFFSET_X;
@@ -88,11 +89,22 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
 
     for (const ev of filteredTimeline) {
         const midi = Number.isInteger(ev.midi) ? ev.midi : parsePitchToMidi(ev.pitch || ev.key || '');
-        const targetStave = midi >= MIDI.C4_MIDI ? notesTrebleStave : notesBassStave;
+        const isTreble = midi >= MIDI.C4_MIDI;
+        const targetStave = isTreble ? notesTrebleStave : notesBassStave;
+        const staveY = isTreble ? trebleY : bassY;
         const note = makeVexNoteFrom(ev);
         if (!note) continue;
 
         const logicX = calculateNoteX(ev.measure || 1, ev.beat || 1, ev.beatFraction || 0, pixelsPerBeat, marginLeft, beatsPerMeasure) + initialLeadPixels;
+        
+        if (showValidTiming) {
+            notesCtx.fillStyle = COLORS.VALIDATION_GREEN;
+            notesCtx.fillRect(logicX - windowPixels, staveY, windowPixels * 2, RENDERING.VALIDATION_WINDOW_HEIGHT);
+            notesCtx.fillStyle = COLORS.GREEN;
+            notesCtx.fillRect(logicX - windowPixels, staveY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
+            notesCtx.fillRect(logicX + windowPixels, staveY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
+        }
+
         const vexX = logicX - RENDERING.VEXFLOW_INTRINSIC_OFFSET;
 
         const tc = new TickContext();
