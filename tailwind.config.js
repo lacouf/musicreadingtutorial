@@ -11,6 +11,7 @@ export default {
         'brand-secondary': '#F59E0B', // Amber
         'brand-bg': '#FFF7ED', // Orange-50 (Cream)
         'brand-surface': '#FFFFFF',
+        'brand-accent': '#EC4899', // Pink
       },
       borderRadius: {
         'xl': '1rem',

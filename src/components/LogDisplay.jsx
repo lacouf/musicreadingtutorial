@@ -13,7 +13,7 @@ export default function LogDisplay({ log }) {
     return (
         <div 
             ref={logContainerRef} 
-            className="h-32 overflow-y-auto bg-white border border-gray-200 rounded-lg p-3 font-mono text-xs text-gray-600 shadow-inner"
+            className="h-full overflow-y-auto bg-white p-3 font-mono text-[10px] text-gray-600 shadow-inner"
         >
             {log.length === 0 && <div className="text-gray-400 italic">No events yet...</div>}
             {log.map((l, i) => (
