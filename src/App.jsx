@@ -59,6 +59,13 @@ export default function App() {
     const [includeSharps, setIncludeSharps] = useState(false);
     const [showValidTiming, setShowValidTiming] = useState(false);
     const [beatTolerance, setBeatTolerance] = useState(TIMING.STRICT_BEAT_TOLERANCE);
+    const [enabledDurations, setEnabledDurations] = useState({
+        whole: false,
+        half: false,
+        quarter: true,
+        eighth: false,
+        sixteenth: false
+    });
 
     const [mode, setMode] = useState('practice'); 
     const [lessonMeta, setLessonMeta] = useState({ tempo: 80, beatsPerMeasure: 4 });
@@ -97,7 +104,17 @@ export default function App() {
             rawTimeline = parseTimeline(useJson ? 'json' : 'musicxml', lessonData, newMeta.tempo);
         } else {
             newMeta = { tempo: 80, beatsPerMeasure: 4 };
-            rawTimeline = generateRandomTimeline(minNote, maxNote, 20, newMeta.tempo, includeSharps);
+            
+            const possibleDurations = [];
+            if (enabledDurations.whole) possibleDurations.push(4.0);
+            if (enabledDurations.half) possibleDurations.push(2.0);
+            if (enabledDurations.quarter) possibleDurations.push(1.0);
+            if (enabledDurations.eighth) possibleDurations.push(0.5);
+            if (enabledDurations.sixteenth) possibleDurations.push(0.25);
+            
+            if (possibleDurations.length === 0) possibleDurations.push(1.0);
+
+            rawTimeline = generateRandomTimeline(minNote, maxNote, 20, newMeta.tempo, includeSharps, possibleDurations);
         }
 
         setLessonMeta(newMeta);
@@ -503,6 +520,32 @@ export default function App() {
                                         <div className="bg-brand-bg/50 p-4 rounded-3xl border border-white shadow-inner">
                                             <span className="text-[10px] font-black text-gray-400 uppercase block text-center mb-1">Max</span>
                                             <input value={maxNote} onChange={(e) => setMaxNote(e.target.value)} className="w-full bg-transparent text-center font-black text-xl text-brand-primary outline-none" />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block ml-1 text-center">Note Types</span>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {[
+                                                { id: 'whole', label: 'Whole (1/1)' },
+                                                { id: 'half', label: 'Half (1/2)' },
+                                                { id: 'quarter', label: 'Quarter (1/4)' },
+                                                { id: 'eighth', label: 'Eighth (1/8)' },
+                                                { id: 'sixteenth', label: '16th (1/16)' }
+                                            ].map(({ id, label }) => (
+                                                <label key={id} className={`flex items-center gap-2 p-2 rounded-xl transition-all border cursor-pointer ${
+                                                    id === 'quarter' ? 'bg-violet-50 border-violet-100 opacity-80 cursor-default' : 'bg-gray-50 border-transparent hover:bg-gray-100 hover:border-white'
+                                                }`}>
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={id === 'quarter' ? true : enabledDurations[id]} 
+                                                        disabled={id === 'quarter'}
+                                                        onChange={(e) => setEnabledDurations(prev => ({ ...prev, [id]: e.target.checked }))} 
+                                                        className="w-4 h-4 accent-brand-primary rounded shadow-sm" 
+                                                    />
+                                                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-tighter">{label}</span>
+                                                </label>
+                                            ))}
                                         </div>
                                     </div>
 

@@ -9,9 +9,10 @@ import { TIMING, GENERATOR } from './constants';
  * @param {number} count - Number of notes to generate
  * @param {number} tempo - Tempo in BPM (optional, default 80)
  * @param {boolean} includeSharps - Whether to include sharp/black key notes (default true)
+ * @param {number[]} possibleDurations - Array of allowed durations in beats (default [1.0])
  * @returns {Array} - Timeline of note objects
  */
-export function generateRandomTimeline(minPitch, maxPitch, count = GENERATOR.DEFAULT_COUNT, tempo = GENERATOR.DEFAULT_TEMPO_BPM, includeSharps = true) {
+export function generateRandomTimeline(minPitch, maxPitch, count = GENERATOR.DEFAULT_COUNT, tempo = GENERATOR.DEFAULT_TEMPO_BPM, includeSharps = true, possibleDurations = [1.0]) {
     const minMidi = parsePitchToMidi(minPitch) ?? GENERATOR.DEFAULT_MIN_MIDI;
     const maxMidi = parsePitchToMidi(maxPitch) ?? GENERATOR.DEFAULT_MAX_MIDI;
     
@@ -37,7 +38,26 @@ export function generateRandomTimeline(minPitch, maxPitch, count = GENERATOR.DEF
         const midi = pool[Math.floor(Math.random() * pool.length)];
         const pitch = midiToPitch(midi);
         const vfKey = midiToVexKey(midi);
-        const durBeats = GENERATOR.DEFAULT_NOTE_DURATION_BEATS; 
+        
+        // Calculate remaining space in the current measure
+        // We use a small epsilon to handle floating point precision issues
+        let remainingInMeasure = beatsPerMeasure - (currentBeatAbs % beatsPerMeasure);
+        if (remainingInMeasure < 0.01) remainingInMeasure = beatsPerMeasure;
+
+        // Randomly pick a duration from the allowed set
+        let durBeats = possibleDurations[Math.floor(Math.random() * possibleDurations.length)];
+        
+        // Ensure note doesn't cross barline:
+        // Try to pick a smaller allowed duration if the current one doesn't fit
+        if (durBeats > remainingInMeasure) {
+            const fitOptions = possibleDurations.filter(d => d <= remainingInMeasure);
+            if (fitOptions.length > 0) {
+                durBeats = fitOptions[Math.floor(Math.random() * fitOptions.length)];
+            } else {
+                // If none of the user's selected notes fit, clamp to the measure boundary
+                durBeats = remainingInMeasure;
+            }
+        }
         
         // Calculate measure and beat info
         // measure is 1-based
