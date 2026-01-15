@@ -512,10 +512,10 @@ export default function App() {
                     )}
 
                     {/* Controls & Settings Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                         
                         {/* Control Panel */}
-                        <div className="lg:col-span-2 bg-white p-10 rounded-[2.5rem] shadow-xl border border-gray-50 flex flex-col gap-8">
+                        <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border border-gray-50 flex flex-col gap-8">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-xl font-black text-gray-800 flex items-center gap-3 italic">
                                     <span className="w-2.5 h-8 bg-brand-primary rounded-full"></span>
