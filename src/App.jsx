@@ -20,6 +20,15 @@ export default function App() {
     const containerRef = useRef(null);
     const stavesRef = useRef(null);
     const notesRef = useRef(null);
+
+    // Initialize off-screen canvases once
+    if (!stavesRef.current && typeof document !== 'undefined') {
+        stavesRef.current = document.createElement('canvas');
+    }
+    if (!notesRef.current && typeof document !== 'undefined') {
+        notesRef.current = document.createElement('canvas');
+    }
+
     const [midiSupported, setMidiSupported] = useState(false);
     const timelineRef = useRef([]);
     const [log, setLog] = useState([]);
@@ -91,8 +100,7 @@ export default function App() {
     };
 
     const loadTimeline = () => {
-        if (!stavesRef.current) stavesRef.current = document.createElement('canvas');
-        if (!notesRef.current) notesRef.current = document.createElement('canvas');
+        if (!stavesRef.current || !notesRef.current) return;
 
         let rawTimeline;
         let newMeta = { tempo: 80, beatsPerMeasure: 4 };
@@ -257,7 +265,10 @@ export default function App() {
 
     useEffect(() => {
         const handleResize = (entries) => {
-            for (let entry of entries) setViewportWidth(entry.contentRect.width);
+            for (let entry of entries) {
+                const width = entry.contentRect.width;
+                if (width > 0) setViewportWidth(width);
+            }
         };
         const observer = new ResizeObserver(handleResize);
         if (containerRef.current) observer.observe(containerRef.current);
