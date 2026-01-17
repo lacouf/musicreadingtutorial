@@ -94,6 +94,75 @@ export const exampleMusicXML = `<?xml version="1.0" encoding="UTF-8"?>
   </part>
 </score-partwise>`;
 
+
+export const rhythmMixLessonJSON = {
+    title: 'Rhythm & Beaming Exercise',
+    tempo: 80,
+    timeSignature: { numerator: 4, denominator: 4 },
+    notes: [
+        // Measure 1: 4 Eighth notes beamed together (0.5 duration each)
+        { measure: 1, beat: 1, beatFraction: 0, durationBeats: 0.5, pitch: 'C4' },
+        { measure: 1, beat: 1, beatFraction: 0.5, durationBeats: 0.5, pitch: 'D4' },
+        { measure: 1, beat: 2, beatFraction: 0, durationBeats: 0.5, pitch: 'E4' },
+        { measure: 1, beat: 2, beatFraction: 0.5, durationBeats: 0.5, pitch: 'F4' },
+        // Two Quarter notes (no beam)
+        { measure: 1, beat: 3, beatFraction: 0, durationBeats: 1.0, pitch: 'G4' },
+        { measure: 1, beat: 4, beatFraction: 0, durationBeats: 1.0, pitch: 'G4' },
+
+        // Measure 2: 8 Eighth notes (Scale C4-C5)
+        { measure: 2, beat: 1, beatFraction: 0, durationBeats: 0.5, pitch: 'C4' },
+        { measure: 2, beat: 1, beatFraction: 0.5, durationBeats: 0.5, pitch: 'D4' },
+        { measure: 2, beat: 2, beatFraction: 0, durationBeats: 0.5, pitch: 'E4' },
+        { measure: 2, beat: 2, beatFraction: 0.5, durationBeats: 0.5, pitch: 'F4' },
+        { measure: 2, beat: 3, beatFraction: 0, durationBeats: 0.5, pitch: 'G4' },
+        { measure: 2, beat: 3, beatFraction: 0.5, durationBeats: 0.5, pitch: 'A4' },
+        { measure: 2, beat: 4, beatFraction: 0, durationBeats: 0.5, pitch: 'B4' },
+        { measure: 2, beat: 4, beatFraction: 0.5, durationBeats: 0.5, pitch: 'C5' },
+
+        // Measure 3: 16th notes (0.25 duration)
+        { measure: 3, beat: 1, beatFraction: 0, durationBeats: 0.25, pitch: 'C4' },
+        { measure: 3, beat: 1, beatFraction: 0.25, durationBeats: 0.25, pitch: 'C4' },
+        { measure: 3, beat: 1, beatFraction: 0.5, durationBeats: 0.25, pitch: 'C4' },
+        { measure: 3, beat: 1, beatFraction: 0.75, durationBeats: 0.25, pitch: 'C4' },
+        { measure: 3, beat: 2, beatFraction: 0, durationBeats: 1.0, pitch: 'D4' }, // Quarter
+        
+        // Measure 4: Mixed Rhythm
+        { measure: 4, beat: 1, beatFraction: 0, durationBeats: 0.5, pitch: 'C4' },
+        { measure: 4, beat: 1, beatFraction: 0.5, durationBeats: 0.25, pitch: 'D4' },
+        { measure: 4, beat: 1, beatFraction: 0.75, durationBeats: 0.25, pitch: 'E4' },
+        { measure: 4, beat: 2, beatFraction: 0, durationBeats: 1.0, pitch: 'F4' }
+    ]
+};
+
+export const rhythmMixLessonXML = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Music</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <!-- Measure 1: 4 Eighths beamed -->
+    <measure number="1">
+      <attributes>
+        <divisions>2</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><type>eighth</type><beam number="1">begin</beam></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><type>eighth</type><beam number="1">continue</beam></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><type>eighth</type><beam number="1">continue</beam></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><type>eighth</type><beam number="1">end</beam></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><type>quarter</type></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+export const AVAILABLE_LESSONS = [
+    { id: 'polyphonic', name: 'Polyphonic Chords', data: exampleJSONLesson, xml: exampleMusicXML },
+    { id: 'rhythm', name: 'Rhythm & Beaming', data: rhythmMixLessonJSON, xml: rhythmMixLessonXML }
+];
+
 export function simpleMusicXMLtoTimeline(xmlString, tempo = 60) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(xmlString, 'application/xml');
@@ -193,6 +262,8 @@ export function parseTimeline(lessonType, lessonData, tempo) {
             let beatFraction = n.beatFraction;
             let durationBeats = n.durationBeats;
 
+            let timeSec = n.timeSec ?? n.start;
+
             if (measure === undefined || beat === undefined) {
                 // Infer from start time (seconds)
                 const startSec = n.start ?? 0;
@@ -202,6 +273,12 @@ export function parseTimeline(lessonType, lessonData, tempo) {
                 const beatInMeasure = totalBeats % beatsPerMeasure;
                 beat = Math.floor(beatInMeasure) + 1;
                 beatFraction = beatInMeasure % 1;
+                
+                if (timeSec === undefined) timeSec = startSec;
+            } else if (timeSec === undefined) {
+                // Infer start time from measure/beat
+                const totalBeats = (measure - 1) * beatsPerMeasure + (beat - 1) + (beatFraction || 0);
+                timeSec = totalBeats * secPerBeat;
             }
 
             if (durationBeats === undefined) {
@@ -209,16 +286,18 @@ export function parseTimeline(lessonType, lessonData, tempo) {
                 durationBeats = durSec / secPerBeat;
             }
 
-            return {
+            const result = {
                 ...n,
                 midi: midi,
-                start: n.start ?? 0,
-                timeSec: n.timeSec ?? n.start ?? 0,
+                start: timeSec ?? 0,
+                timeSec: timeSec ?? 0,
                 measure,
                 beat,
                 beatFraction,
                 durationBeats
             };
+            // console.log('Parsed Note:', result);
+            return result;
         });
     } else if (lessonType === 'musicxml') {
         return simpleMusicXMLtoTimeline(lessonData, tempo);

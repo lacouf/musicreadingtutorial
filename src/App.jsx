@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import ScrollingCanvas from './components/ScrollingCanvas';
 import { renderScoreToCanvases } from './components/ScoreRenderer';
 import { initializeMidi } from './midi/MidiInput';
-import { exampleJSONLesson, exampleMusicXML, parseTimeline } from './parser/TimeLineParser';
+import { exampleJSONLesson, exampleMusicXML, parseTimeline, AVAILABLE_LESSONS } from './parser/TimeLineParser';
 import LogDisplay from './components/LogDisplay';
 import LessonDisplay from './components/LessonDisplay';
 import { audioSynth } from './audio/AudioSynth';
@@ -78,6 +78,7 @@ export default function App() {
     });
 
     const [mode, setMode] = useState('practice'); 
+    const [selectedLessonId, setSelectedLessonId] = useState(AVAILABLE_LESSONS[0].id);
     const [lessonMeta, setLessonMeta] = useState({ tempo: 80, beatsPerMeasure: 4 });
 
     const activeMatchesRef = useRef(new Map()); // midi -> { index, startBeat, durationBeats }
@@ -106,12 +107,15 @@ export default function App() {
         let newMeta = { tempo: 80, beatsPerMeasure: 4 };
 
         if (mode === 'lesson') {
-            const useJson = true;
-            const lessonData = useJson ? exampleJSONLesson : exampleMusicXML;
+            const useJson = true; 
+            const lesson = AVAILABLE_LESSONS.find(l => l.id === selectedLessonId) || AVAILABLE_LESSONS[0];
+            const lessonData = useJson ? lesson.data : lesson.xml;
+            
             newMeta = { 
                 tempo: lessonData.tempo || 80, 
                 beatsPerMeasure: lessonData.timeSignature?.numerator || 4 
             };
+            
             rawTimeline = parseTimeline(useJson ? 'json' : 'musicxml', lessonData, newMeta.tempo);
         } else {
             newMeta = { tempo: 80, beatsPerMeasure: 4 };
@@ -275,7 +279,7 @@ export default function App() {
         return () => observer.disconnect();
     }, []);
 
-    useEffect(() => { loadTimeline(); }, [mode, minNote, maxNote, includeSharps]);
+    useEffect(() => { loadTimeline(); }, [mode, selectedLessonId, minNote, maxNote, includeSharps]);
     useEffect(() => { renderCurrentTimeline(); }, [viewportWidth, showValidTiming, lessonMeta, beatTolerance]);
 
     useEffect(() => {
@@ -429,20 +433,38 @@ export default function App() {
                 <div className="flex-1 p-6 md:p-10 max-w-6xl mx-auto w-full space-y-10">
                     
                     {/* Mode Tabs */}
-                    <div className="bg-white/50 p-1.5 rounded-3xl inline-flex gap-1.5 border border-white shadow-sm ring-1 ring-gray-200/50">
-                        {['practice', 'lesson'].map((m) => (
-                            <button 
-                                key={m}
-                                onClick={() => setMode(m)}
-                                className={`px-10 py-3 rounded-2xl transition-all font-black text-xs uppercase tracking-widest ${
-                                    mode === m 
-                                        ? 'bg-brand-primary text-white shadow-xl shadow-violet-200 scale-[1.02]' 
-                                        : 'text-gray-400 hover:text-gray-600 hover:bg-white'
-                                }`}
-                            >
-                                {m}
-                            </button>
-                        ))}
+                    <div className="flex items-center gap-4">
+                        <div className="bg-white/50 p-1.5 rounded-3xl inline-flex gap-1.5 border border-white shadow-sm ring-1 ring-gray-200/50">
+                            {['practice', 'lesson'].map((m) => (
+                                <button 
+                                    key={m}
+                                    onClick={() => setMode(m)}
+                                    className={`px-10 py-3 rounded-2xl transition-all font-black text-xs uppercase tracking-widest ${
+                                        mode === m 
+                                            ? 'bg-brand-primary text-white shadow-xl shadow-violet-200 scale-[1.02]' 
+                                            : 'text-gray-400 hover:text-gray-600 hover:bg-white'
+                                    }`}
+                                >
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
+
+                        {mode === 'lesson' && (
+                            <div className="bg-white/50 p-1.5 rounded-3xl inline-flex gap-1.5 border border-white shadow-sm ring-1 ring-gray-200/50">
+                                <select 
+                                    value={selectedLessonId}
+                                    onChange={(e) => setSelectedLessonId(e.target.value)}
+                                    className="px-6 py-2.5 rounded-2xl bg-white text-gray-700 font-bold text-xs uppercase tracking-wide border-none outline-none cursor-pointer hover:bg-gray-50 transition-colors"
+                                >
+                                    {AVAILABLE_LESSONS.map(lesson => (
+                                        <option key={lesson.id} value={lesson.id}>
+                                            {lesson.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     {/* Score section */}

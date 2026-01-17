@@ -1,4 +1,4 @@
-import { Renderer, Stave, StaveNote, TickContext, Dot, Accidental } from 'vexflow';
+import { Renderer, Stave, StaveNote, TickContext, Dot, Accidental, Beam } from 'vexflow';
 import { parsePitchToMidi, STRICT_WINDOW_SECONDS } from '../core/musicUtils';
 import { RENDERING, MIDI, COLORS, TIMING } from '../core/constants';
 import { beatsToVexDuration } from '../core/durationConverter';
@@ -41,7 +41,6 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     const filteredTimeline = timeline.filter(ev => {
         const midi = (Number.isInteger(ev.midi) ? ev.midi : parsePitchToMidi(ev.pitch || ev.key || ''));
         if (midi == null || midi < minMidi || midi > maxMidi) {
-            // console.log('Dropped event:', ev, 'Midi:', midi);
             return false;
         }
         return true;
@@ -78,8 +77,6 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     // Group events by start time to form chords
     const groupedEvents = new Map();
     for (const ev of filteredTimeline) {
-        // Use a key based on time to group simultaneous notes
-        // Using measure+beat+beatFraction is robust
         const timeKey = `${ev.measure}-${ev.beat}-${ev.beatFraction}`;
         if (!groupedEvents.has(timeKey)) {
             groupedEvents.set(timeKey, []);
@@ -87,12 +84,24 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         groupedEvents.get(timeKey).push(ev);
     }
 
-    // Process each group
+    // Store notes grouped by measure for beaming
+    // Map<measureIndex, { treble: StaveNote[], bass: StaveNote[] }>
+    const notesByMeasure = new Map();
+
+    const getMeasureGroup = (m) => {
+        if (!notesByMeasure.has(m)) {
+            notesByMeasure.set(m, { treble: [], bass: [] });
+        }
+        return notesByMeasure.get(m);
+    };
+
+    // Process each group (chord)
     for (const [key, group] of groupedEvents) {
         if (group.length === 0) continue;
 
-        // Representative event for positioning (all events in group share time)
+        // Representative event for positioning
         const leadEv = group[0];
+        const measureIndex = leadEv.measure || 1;
         
         // Split into treble and bass notes
         const trebleNotes = [];
@@ -107,11 +116,10 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         const logicX = calculateNoteX(leadEv.measure || 1, leadEv.beat || 1, leadEv.beatFraction || 0, pixelsPerBeat, marginLeft, beatsPerMeasure) + initialLeadPixels;
         const vexX = logicX - RENDERING.VEXFLOW_INTRINSIC_OFFSET;
 
-        // Helper to draw a chord (or single note) on a stave
-        const drawChord = (items, stave, staveY) => {
+        // Helper to create and collect a chord (or single note)
+        const createChord = (items, stave, staveY, targetArray) => {
             if (items.length === 0) return;
             
-            // Assume all notes in chord have same duration (take from first)
             const { duration, dots } = beatsToVexDuration(items[0].durationBeats || 1);
             
             const keys = [];
@@ -134,13 +142,13 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
             if (keys.length === 0) return;
 
             const note = new StaveNote({ keys, duration });
-            if (dots > 0) note.addModifier(new Dot(), 0); // Dot applies to all? VexFlow usually handles dots per note or for the whole chord. With StaveNote, one dot is usually enough for simple chords.
+            if (dots > 0) note.addModifier(new Dot(), 0);
 
             modifiers.forEach(mod => {
                 note.addModifier(new Accidental(mod.type), mod.index);
             });
 
-            // Draw validation window for this chord position
+            // Draw validation window immediately (independent of VexFlow rendering)
             if (showValidTiming) {
                 notesCtx.fillStyle = COLORS.VALIDATION_GREEN;
                 notesCtx.fillRect(logicX - windowPixels, staveY, windowPixels * 2, RENDERING.VALIDATION_WINDOW_HEIGHT);
@@ -149,14 +157,49 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
                 notesCtx.fillRect(logicX + windowPixels, staveY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
             }
 
+            // Position note
             const tc = new TickContext();
             tc.addTickable(note).preFormat().setX(vexX);
             note.setContext(notesCtx).setStave(stave);
-            note.draw();
+            
+            // Collect for beaming and later drawing
+            targetArray.push(note);
         };
 
-        drawChord(trebleNotes, notesTrebleStave, trebleY);
-        drawChord(bassNotes, notesBassStave, bassY);
+        const measureGroup = getMeasureGroup(measureIndex);
+        createChord(trebleNotes, notesTrebleStave, trebleY, measureGroup.treble);
+        createChord(bassNotes, notesBassStave, bassY, measureGroup.bass);
+    }
+
+    // Generate beams and draw everything
+    for (const [measure, group] of notesByMeasure) {
+        try {
+            // Treble
+            if (group.treble.length > 0) {
+                let beams = [];
+                try {
+                    beams = Beam.generateBeams(group.treble);
+                } catch (e) {
+                    console.warn(`Treble beaming failed for measure ${measure}:`, e);
+                }
+                group.treble.forEach(note => note.draw());
+                beams.forEach(beam => beam.setContext(notesCtx).draw());
+            }
+
+            // Bass
+            if (group.bass.length > 0) {
+                let beams = [];
+                try {
+                    beams = Beam.generateBeams(group.bass);
+                } catch (e) {
+                    console.warn(`Bass beaming failed for measure ${measure}:`, e);
+                }
+                group.bass.forEach(note => note.draw());
+                beams.forEach(beam => beam.setContext(notesCtx).draw());
+            }
+        } catch (e) {
+            console.error(`Error rendering measure ${measure}:`, e);
+        }
     }
 
     return Promise.resolve();
