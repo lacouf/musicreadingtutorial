@@ -1,38 +1,134 @@
-
 import { describe, it, expect } from 'vitest';
+import { findEventsInWindow, validateNoteOn, validateNoteOff } from '../validation';
 
-const timeline = [
-    { start: 0.0, midi: 60 }, // C4
-    { start: 5.0, midi: 60 }, // C4
-    { start: 10.0, midi: 60 }, // C4
-];
+describe('Validation Utilities', () => {
+    const timeline = [
+        { start: 0.0, midi: 60, pitch: 'C4', durationBeats: 1.0 },
+        { start: 1.0, midi: 62, pitch: 'D4', durationBeats: 1.0 },
+        { start: 2.0, midi: 64, pitch: 'E4', durationBeats: 1.0 },
+    ];
 
-function findEventsInWindow(timeSec, windowSec = 0.45) {
-    const out = [];
-    for (let i = 0; i < timeline.length; i++) {
-        const ev = timeline[i];
-        const t = ev.start || 0;
-        const d = Math.abs(t - timeSec);
-        if (d <= windowSec) out.push({ ev, d, index: i });
-    }
-    out.sort((a, b) => a.d - b.d);
-    return out;
-}
+    describe('findEventsInWindow', () => {
+        it('finds events within the window', () => {
+            const results = findEventsInWindow(timeline, 1.0, 0.1);
+            expect(results).toHaveLength(1);
+            expect(results[0].ev.midi).toBe(62);
+        });
 
-describe('Validation Logic', () => {
-    it('matches note at exact time', () => {
-        const result = findEventsInWindow(5.0);
-        expect(result).toHaveLength(1);
-        expect(result[0].ev.start).toBe(5.0);
+        it('returns multiple events if they fall in the window', () => {
+            const results = findEventsInWindow(timeline, 1.5, 0.6);
+            expect(results).toHaveLength(2); // D4 and E4
+        });
+
+        it('sorts events by distance from target time', () => {
+            const results = findEventsInWindow(timeline, 1.2, 1.0);
+            expect(results[0].ev.midi).toBe(62); // 1.0 is closer to 1.2 than 2.0 or 0.0
+        });
     });
 
-    it('does not match note outside window (5.5s)', () => {
-        const result = findEventsInWindow(5.5);
-        expect(result).toHaveLength(0);
+    describe('validateNoteOn', () => {
+        const tempo = 60; // 1 beat = 1 second
+        const validatedNotes = new Map();
+
+        it('returns "correct" for an exact match', () => {
+            const result = validateNoteOn({
+                note: 60,
+                currentBeat: 0,
+                tempo,
+                timeline,
+                validatedNotes,
+                beatTolerance: 0.1
+            });
+            expect(result.result).toBe('correct');
+            expect(result.color).toBe('green');
+            expect(result.matchData.index).toBe(0);
+        });
+
+        it('returns "wrong" for pitch mismatch in window', () => {
+            const result = validateNoteOn({
+                note: 61, // played C#4 instead of C4
+                currentBeat: 0,
+                tempo,
+                timeline,
+                validatedNotes,
+                beatTolerance: 0.1
+            });
+            expect(result.result).toBe('wrong');
+            expect(result.color).toBe('red');
+            expect(result.message).toContain('expected C4');
+        });
+
+        it('returns "extra" for note played where none expected', () => {
+            const result = validateNoteOn({
+                note: 60,
+                currentBeat: 5.0, // way outside timeline
+                tempo,
+                timeline,
+                validatedNotes,
+                beatTolerance: 0.1
+            });
+            expect(result.result).toBe('extra');
+            expect(result.color).toBe('red');
+        });
+
+        it('prevents double-triggering using revalidationWindow', () => {
+            const vNotes = new Map([[0, 1000]]);
+            const result = validateNoteOn({
+                note: 60,
+                currentBeat: 0,
+                tempo,
+                timeline,
+                validatedNotes: vNotes,
+                beatTolerance: 0.1,
+                now: 1100, // Only 100ms later
+                revalidationWindow: 500
+            });
+            // Should ignore the note at index 0 because it was just validated
+            expect(result.result).toBe('extra'); 
+        });
     });
 
-    it('does not match note outside window (8.0s)', () => {
-        const result = findEventsInWindow(8.0);
-        expect(result).toHaveLength(0);
+    describe('validateNoteOff', () => {
+        const activeMatch = { index: 0, startBeat: 0, durationBeats: 1.0 };
+
+        it('returns null if validation is disabled', () => {
+            const result = validateNoteOff({
+                note: 60,
+                currentBeat: 1.0,
+                activeMatch,
+                validateNoteLength: false
+            });
+            expect(result).toBeNull();
+        });
+
+        it('returns perfect_release for correct duration', () => {
+            const result = validateNoteOff({
+                note: 60,
+                currentBeat: 1.0,
+                activeMatch,
+                validateNoteLength: true
+            });
+            expect(result.result).toBe('perfect_release');
+        });
+
+        it('returns early_release if released too soon', () => {
+            const result = validateNoteOff({
+                note: 60,
+                currentBeat: 0.5,
+                activeMatch,
+                validateNoteLength: true
+            });
+            expect(result.result).toBe('early_release');
+        });
+
+        it('returns late_release if held too long', () => {
+            const result = validateNoteOff({
+                note: 60,
+                currentBeat: 2.0,
+                activeMatch,
+                validateNoteLength: true
+            });
+            expect(result.result).toBe('late_release');
+        });
     });
 });

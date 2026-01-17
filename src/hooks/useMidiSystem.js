@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { initializeMidi } from '../midi/MidiInput';
 import { audioSynth } from '../audio/AudioSynth';
 import { TIMING, RENDERING } from '../core/constants';
+import { validateNoteOn, validateNoteOff } from '../core/validation';
 
 export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRef, settings) {
     const [midiSupported, setMidiSupported] = useState(false);
@@ -29,22 +30,6 @@ export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRe
         }, 220);
     }
 
-    // Helper to find events near the playhead
-    function findEventsInWindow(timeSec, windowSec = 0.45) {
-        const out = [];
-        // timelineRef.current might be updated by useTimeline, so we access .current
-        if (!timelineRef.current) return [];
-        
-        for (let i = 0; i < timelineRef.current.length; i++) {
-            const ev = timelineRef.current[i];
-            const t = ev.start || 0;
-            const d = Math.abs(t - timeSec);
-            if (d <= windowSec) out.push({ ev, d, index: i });
-        }
-        out.sort((a, b) => a.d - b.d);
-        return out;
-    }
-
     function cleanupValidatedNotes(currentTime) {
         const expiryTime = 2000; 
         for (const [index, timestamp] of validatedNotesRef.current.entries()) {
@@ -68,47 +53,25 @@ export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRe
                 
                 if (pausedRef.current) return;
 
-                // Validation Logic
                 const currentBeat = scrollOffsetRef.current / RENDERING.PIXELS_PER_BEAT;
-                const secPerBeat = TIMING.SECONDS_IN_MINUTE / lessonMeta.tempo;
-                const playTime = currentBeat * secPerBeat;
-                const windowSec = TIMING.WIDE_BEAT_TOLERANCE * secPerBeat;
-                const strictWindowSec = beatTolerance * secPerBeat;
-
                 cleanupValidatedNotes(now);
-                const allCandidates = findEventsInWindow(playTime, windowSec);
-                const revalidationWindow = 500; 
-                
-                const candidates = allCandidates.filter(c => {
-                    const lastValidated = validatedNotesRef.current.get(c.index);
-                    return !lastValidated || (now - lastValidated) > revalidationWindow;
+
+                const validation = validateNoteOn({
+                    note,
+                    currentBeat,
+                    tempo: lessonMeta.tempo,
+                    timeline: timelineRef.current,
+                    validatedNotes: validatedNotesRef.current,
+                    beatTolerance,
+                    now
                 });
 
-                if (candidates.length === 0) {
-                    setLog(l => [...l, `❌ Extra/Misplaced: played ${note} at ${currentBeat.toFixed(2)}b`]);
-                    flashPlayhead('red');
-                    return;
-                }
+                if (validation.message) setLog(l => [...l, validation.message]);
+                if (validation.color) flashPlayhead(validation.color);
 
-                const exact = candidates.find(c => Number.isInteger(c.ev.midi) && c.ev.midi === note && c.d <= strictWindowSec);
-                if (exact) {
-                    validatedNotesRef.current.set(exact.index, now);
-                    activeMatchesRef.current.set(note, { 
-                        index: exact.index, 
-                        startBeat: currentBeat, 
-                        durationBeats: exact.ev.durationBeats 
-                    });
-                    
-                    const key = exact.ev.vfKey || exact.ev.pitch || `midi:${exact.ev.midi}`;
-                    const diffBeats = exact.d / secPerBeat;
-                    setLog(l => [...l, `✅ Correct: ${key} (dt=${diffBeats.toFixed(2)} beats)`]);
-                    flashPlayhead('green');
-                } else {
-                    const nearest = candidates[0];
-                    const expectedKey = nearest.ev.vfKey || nearest.ev.pitch || `midi:${nearest.ev.midi}`;
-                    const diffBeats = nearest.d / secPerBeat;
-                    setLog(l => [...l, `❌ Wrong: played ${note}, expected ${expectedKey} (dt=${diffBeats.toFixed(2)} beats)`]);
-                    flashPlayhead('red');
+                if (validation.result === 'correct') {
+                    validatedNotesRef.current.set(validation.matchedIndex, now);
+                    activeMatchesRef.current.set(note, validation.matchData);
                 }
             },
             onNoteOff: (pitch, note) => {
@@ -117,23 +80,18 @@ export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRe
 
                 if (pausedRef.current) return;
 
-                const match = activeMatchesRef.current.get(note);
-                if (match && validateNoteLength) {
-                    const currentBeat = scrollOffsetRef.current / RENDERING.PIXELS_PER_BEAT;
-                    const heldBeats = currentBeat - match.startBeat;
-                    const expected = match.durationBeats;
-                    
-                    const tolerance = Math.max(0.2, expected * 0.2);
-                    const diff = Math.abs(heldBeats - expected);
+                const currentBeat = scrollOffsetRef.current / RENDERING.PIXELS_PER_BEAT;
+                const releaseValidation = validateNoteOff({
+                    note,
+                    currentBeat,
+                    activeMatch: activeMatchesRef.current.get(note),
+                    validateNoteLength
+                });
 
-                    if (diff <= tolerance) {
-                        setLog(l => [...l, `✨ Perfect Release! Held ${heldBeats.toFixed(2)}b (target ${expected}b)`]);
-                    } else if (heldBeats < expected) {
-                        setLog(l => [...l, `⚠️ Released Early: Held ${heldBeats.toFixed(2)}b (target ${expected}b)`]);
-                    } else {
-                        setLog(l => [...l, `⚠️ Held Too Long: Held ${heldBeats.toFixed(2)}b (target ${expected}b)`]);
-                    }
+                if (releaseValidation && releaseValidation.message) {
+                    setLog(l => [...l, releaseValidation.message]);
                 }
+
                 activeMatchesRef.current.delete(note);
             },
             onLog: (message) => setLog(l => [...l, message]),
