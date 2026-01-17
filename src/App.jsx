@@ -11,6 +11,7 @@ import SettingsPanel from './components/SettingsPanel';
 import ControlPanel from './components/ControlPanel';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
+import { usePlayback } from './hooks/usePlayback';
 import { audioSynth } from './audio/AudioSynth';
 import { parsePitchToMidi, midiToVexKey } from './core/musicUtils';
 import { generateRandomTimeline } from './core/NoteGenerator';
@@ -41,23 +42,11 @@ export default function App() {
     const [showDevTools, setShowDevTools] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     
-    // Playback State
-    const defaultSpeed = calculateScrollSpeed(80, RENDERING.PIXELS_PER_BEAT);
-    const initialScroll = (-LEAD_IN_SECONDS * defaultSpeed) / DEFAULT_TEMPO;
-    
-    const [scrollOffset, setScrollOffset] = useState(initialScroll);
     const [renderTrigger, setRenderTrigger] = useState(0); 
     const [playheadFlash, setPlayheadFlash] = useState(null);
-    const [paused, setPaused] = useState(true);
-    const pausedRef = useRef(true); 
 
     const [pulseActive, setPulseActive] = useState(false);
     const [pulseColor, setPulseColor] = useState('red');
-
-    const animationFrameId = useRef(null);
-    const lastFrameTimeRef = useRef(0);
-    const totalActiveTimeRef = useRef(-LEAD_IN_SECONDS); 
-    const scrollOffsetRef = useRef(initialScroll);
 
     const validatedNotesRef = useRef(new Map());
     const recentMidiEventsRef = useRef(new Map());
@@ -87,6 +76,17 @@ export default function App() {
     const [lessonMeta, setLessonMeta] = useState({ tempo: 80, beatsPerMeasure: 4 });
 
     const activeMatchesRef = useRef(new Map()); // midi -> { index, startBeat, durationBeats }
+
+    // Custom Hook: Playback Engine
+    const { 
+        scrollOffset, 
+        scrollOffsetRef, 
+        paused, 
+        pausedRef, 
+        togglePause: engineTogglePause, 
+        resetPlayback,
+        setPaused
+    } = usePlayback(lessonMeta, tempoFactor, LEAD_IN_SECONDS);
 
     const renderCurrentTimeline = () => {
         if (!stavesRef.current || !notesRef.current || !timelineRef.current) return;
@@ -176,21 +176,9 @@ export default function App() {
         // We want to start at -LEAD_IN_SECONDS.
         // distance = time * speed.
         // scroll = -LEAD_IN_SECONDS * baseSpeed.
-        // (The / DEFAULT_TEMPO in original code might be a mistake or factor? 
-        //  Ah, tempoFactor is initialized to DEFAULT_TEMPO.
-        //  currentSpeed = baseSpeed / tempoFactor.
-        //  So if tempoFactor=DEFAULT_TEMPO, currentSpeed = baseSpeed/DEFAULT_TEMPO.
-        //  So dist = time * (baseSpeed/DEFAULT_TEMPO).
-        //  This seems to imply baseSpeed is "pixels per second at tempo 1.0"?
-        //  Let's trust the initialization logic for now and just replicate it.)
-        
         const startScroll = (-LEAD_IN_SECONDS * baseSpeed) / tempoFactor;
         
-        setScrollOffset(startScroll);
-        scrollOffsetRef.current = startScroll;
-        totalActiveTimeRef.current = -LEAD_IN_SECONDS;
-        setPaused(true);
-        pausedRef.current = true;
+        resetPlayback(startScroll);
 
         const normalizedTimeline = rawTimeline.map(ev => {
             const pitchSource = ev.midi ?? ev.pitch ?? ev.key ?? ev.note ?? ev.name ?? ev.vfKey ?? (Array.isArray(ev.keys) ? ev.keys[0] : '') ;
@@ -319,7 +307,6 @@ export default function App() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => {
-            cancelAnimationFrame(animationFrameId.current);
             cleanupMidi();
             window.removeEventListener('keydown', handleKeyDown);
         };
@@ -340,33 +327,6 @@ export default function App() {
     useEffect(() => { loadTimeline(); }, [mode, selectedLessonId, minNote, maxNote, includeSharps]);
     useEffect(() => { renderCurrentTimeline(); }, [viewportWidth, showValidTiming, lessonMeta, beatTolerance]);
 
-    useEffect(() => {
-        if (paused) {
-            cancelAnimationFrame(animationFrameId.current);
-            lastFrameTimeRef.current = 0;
-            return;
-        }
-
-        const animate = (timestamp) => {
-            if (!lastFrameTimeRef.current) lastFrameTimeRef.current = timestamp;
-            const deltaTime = (timestamp - lastFrameTimeRef.current) / 1000;
-            totalActiveTimeRef.current += deltaTime;
-            lastFrameTimeRef.current = timestamp;
-
-            const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
-            const currentSpeed = baseSpeed / tempoFactor;
-            const deltaScroll = deltaTime * currentSpeed;
-            const newScrollOffset = scrollOffsetRef.current + deltaScroll;
-            
-            scrollOffsetRef.current = newScrollOffset;
-            setScrollOffset(newScrollOffset);
-            animationFrameId.current = requestAnimationFrame(animate);
-        };
-
-        animationFrameId.current = requestAnimationFrame(animate);
-        return () => cancelAnimationFrame(animationFrameId.current);
-    }, [paused, tempoFactor, lessonMeta]); 
-
     function flashPlayhead(color) {
         setPlayheadFlash(color);
         setPulseColor(color || 'red');
@@ -378,29 +338,27 @@ export default function App() {
     }
 
     const togglePause = () => {
-        setPaused(prev => {
-            const newPaused = !prev;
-            pausedRef.current = newPaused; 
-            if (newPaused) {
-                validatedNotesRef.current.clear();
-                recentMidiEventsRef.current.clear();
-            }
-            return newPaused;
-        });
+        // Toggle pause via engine, but also clear validation state if pausing
+        // The engine returns the NEW state? No, togglePause returns void.
+        // We can check 'paused' state, but it won't update immediately in this closure.
+        // So we can assume !paused is the new state if we are toggling.
+        // Actually, safer to just clear.
+        if (!paused) {
+            validatedNotesRef.current.clear();
+            recentMidiEventsRef.current.clear();
+        }
+        engineTogglePause();
     };
 
     const restart = () => {
-        totalActiveTimeRef.current = -LEAD_IN_SECONDS;
         const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
         const currentSpeed = baseSpeed / tempoFactor;
         const startOffset = -LEAD_IN_SECONDS * currentSpeed;
-        scrollOffsetRef.current = startOffset;
-        setScrollOffset(startOffset);
-        lastFrameTimeRef.current = 0;
+        
+        resetPlayback(startOffset, -LEAD_IN_SECONDS);
+        
         validatedNotesRef.current.clear();
         recentMidiEventsRef.current.clear();
-        setPaused(true);
-        pausedRef.current = true;
         setLog(l => [...l, '🔄 Restarted']);
     };
 
