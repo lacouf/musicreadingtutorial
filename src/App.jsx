@@ -12,6 +12,7 @@ import ControlPanel from './components/ControlPanel';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import { usePlayback } from './hooks/usePlayback';
+import { useTimeline } from './hooks/useTimeline';
 import { audioSynth } from './audio/AudioSynth';
 import { parsePitchToMidi, midiToVexKey } from './core/musicUtils';
 import { generateRandomTimeline } from './core/NoteGenerator';
@@ -35,7 +36,6 @@ export default function App() {
     }
 
     const [midiSupported, setMidiSupported] = useState(false);
-    const timelineRef = useRef([]);
     const [log, setLog] = useState([]);
     
     // UI State
@@ -73,9 +73,20 @@ export default function App() {
 
     const [mode, setMode] = useState('practice'); 
     const [selectedLessonId, setSelectedLessonId] = useState(AVAILABLE_LESSONS[0].id);
-    const [lessonMeta, setLessonMeta] = useState({ tempo: 80, beatsPerMeasure: 4 });
 
     const activeMatchesRef = useRef(new Map()); // midi -> { index, startBeat, durationBeats }
+
+    // Custom Hook: Timeline Manager
+    const { 
+        timelineRef, 
+        lessonMeta, 
+        timelineVersion, 
+        loadTimeline 
+    } = useTimeline(
+        mode, 
+        selectedLessonId, 
+        { minNote, maxNote, includeSharps, enabledDurations }
+    );
 
     // Custom Hook: Playback Engine
     const { 
@@ -87,6 +98,15 @@ export default function App() {
         resetPlayback,
         setPaused
     } = usePlayback(lessonMeta, tempoFactor, LEAD_IN_SECONDS);
+
+    // Effect: Reset playback when timeline changes
+    useEffect(() => {
+        const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
+        const startScroll = (-LEAD_IN_SECONDS * baseSpeed) / tempoFactor;
+        resetPlayback(startScroll, -LEAD_IN_SECONDS);
+        setLog(l => [...l, `Loaded ${mode} timeline`]);
+    }, [timelineVersion]);
+
 
     const renderCurrentTimeline = () => {
         if (!stavesRef.current || !notesRef.current || !timelineRef.current) return;
@@ -110,89 +130,7 @@ export default function App() {
             .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
     };
 
-    const loadTimeline = () => {
-        if (!stavesRef.current || !notesRef.current) return;
-
-        let rawTimeline;
-        let newMeta = { tempo: 80, beatsPerMeasure: 4 };
-
-        if (mode === 'lesson') {
-            const useJson = true; 
-            const lesson = AVAILABLE_LESSONS.find(l => l.id === selectedLessonId) || AVAILABLE_LESSONS[0];
-            const lessonData = useJson ? lesson.data : lesson.xml;
-            
-            newMeta = { 
-                tempo: lessonData.tempo || 80, 
-                beatsPerMeasure: lessonData.timeSignature?.numerator || 4 
-            };
-            
-            rawTimeline = parseTimeline(useJson ? 'json' : 'musicxml', lessonData, newMeta.tempo);
-        } else {
-            newMeta = { tempo: 80, beatsPerMeasure: 4 };
-            
-            const possibleDurations = [];
-            if (enabledDurations.whole) possibleDurations.push(4.0);
-            if (enabledDurations.half) possibleDurations.push(2.0);
-            if (enabledDurations.quarter) possibleDurations.push(1.0);
-            if (enabledDurations.eighth) possibleDurations.push(0.5);
-            if (enabledDurations.sixteenth) possibleDurations.push(0.25);
-            
-            if (possibleDurations.length === 0) possibleDurations.push(1.0);
-
-            rawTimeline = generateRandomTimeline(minNote, maxNote, 20, newMeta.tempo, includeSharps, possibleDurations);
-        }
-
-        setLessonMeta(newMeta);
-
-        // Reset scroll position for new timeline
-        const speed = calculateScrollSpeed(newMeta.tempo, RENDERING.PIXELS_PER_BEAT);
-        const newInitialScroll = (-LEAD_IN_SECONDS * speed) / DEFAULT_TEMPO; 
-        // Note: speed calculation might need adjustment if logic changed, but standard formula is:
-        // scroll = beats * pixelsPerBeat. 
-        // time = -3s. beats = time / secPerBeat = -3 / (60/tempo).
-        // scroll = (-3 * tempo / 60) * pixelsPerBeat.
-        
-        // Using existing logic from initial state:
-        // const defaultSpeed = calculateScrollSpeed(80, RENDERING.PIXELS_PER_BEAT);
-        // const initialScroll = (-LEAD_IN_SECONDS * defaultSpeed) / DEFAULT_TEMPO;
-        // Wait, calculateScrollSpeed returns pixels/second or something?
-        // Let's check calculateScrollSpeed import. 
-        
-        // Actually simpler: 
-        // Beat 0 is at 0. We want playhead (at playheadX) to be at time -LEAD_IN.
-        // ScrollOffset is in pixels.
-        // If we want time -3s to be at playhead.
-        // The canvas draws at sx = scrollOffset.
-        // If scrollOffset is negative, we draw from 0 at dx = -scrollOffset.
-        // If dx = playheadX, then time 0 is at playheadX.
-        // So scrollOffset should be -playheadX?
-        // No, current logic is a bit complex with speed.
-        
-        // Let's look at how scrollOffset is initialized:
-        // const initialScroll = (-LEAD_IN_SECONDS * defaultSpeed) / DEFAULT_TEMPO;
-        
-        // I will just use the same logic but with new tempo.
-        const baseSpeed = calculateScrollSpeed(newMeta.tempo, RENDERING.PIXELS_PER_BEAT);
-        // We want to start at -LEAD_IN_SECONDS.
-        // distance = time * speed.
-        // scroll = -LEAD_IN_SECONDS * baseSpeed.
-        const startScroll = (-LEAD_IN_SECONDS * baseSpeed) / tempoFactor;
-        
-        resetPlayback(startScroll);
-
-        const normalizedTimeline = rawTimeline.map(ev => {
-            const pitchSource = ev.midi ?? ev.pitch ?? ev.key ?? ev.note ?? ev.name ?? ev.vfKey ?? (Array.isArray(ev.keys) ? ev.keys[0] : '') ;
-            let midi = (typeof pitchSource === 'number' && Number.isFinite(pitchSource)) ? Math.trunc(pitchSource) : parsePitchToMidi(String(pitchSource || ''));
-            if (midi == null && ev.vfKey) midi = parsePitchToMidi(String(ev.vfKey));
-            const vfKey = midi ? midiToVexKey(midi) : (ev.vfKey || (Array.isArray(ev.keys) ? ev.keys[0] : null));
-            const canonicalPitch = vfKey || (ev.pitch || ev.key || null);
-            return { ...ev, midi: midi ?? null, vfKey: vfKey ?? null, pitch: canonicalPitch, key: canonicalPitch };
-        });
-
-        timelineRef.current = normalizedTimeline;
-        setLog(l => [...l, `Loaded ${mode} timeline`]);
-        renderCurrentTimeline();
-    };
+    // loadTimeline is now provided by useTimeline hook and reset logic is in useEffect[timelineVersion]
 
     useEffect(() => {
         stavesRef.current = document.createElement('canvas');
