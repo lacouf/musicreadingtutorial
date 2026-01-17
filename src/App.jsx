@@ -13,7 +13,8 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import { usePlayback } from './hooks/usePlayback';
 import { useTimeline } from './hooks/useTimeline';
-import { audioSynth } from './audio/AudioSynth';
+import { useMidiSystem } from './hooks/useMidiSystem';
+import { audioSynth } from './audio/AudioSynth'; // Still needed for volume slider in ControlPanel
 import { parsePitchToMidi, midiToVexKey } from './core/musicUtils';
 import { generateRandomTimeline } from './core/NoteGenerator';
 import { RENDERING, TIMING, MIDI } from './core/constants';
@@ -35,21 +36,12 @@ export default function App() {
         notesRef.current = document.createElement('canvas');
     }
 
-    const [midiSupported, setMidiSupported] = useState(false);
-    const [log, setLog] = useState([]);
-    
     // UI State
     const [showDevTools, setShowDevTools] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     
     const [renderTrigger, setRenderTrigger] = useState(0); 
-    const [playheadFlash, setPlayheadFlash] = useState(null);
-
-    const [pulseActive, setPulseActive] = useState(false);
-    const [pulseColor, setPulseColor] = useState('red');
-
-    const validatedNotesRef = useRef(new Map());
-    const recentMidiEventsRef = useRef(new Map());
+    // playheadFlash, pulseActive, pulseColor, validatedNotesRef, recentMidiEventsRef removed from here
 
     const playheadX = RENDERING.PLAYHEAD_X;
     const [viewportWidth, setViewportWidth] = useState(RENDERING.VIEWPORT_WIDTH);
@@ -74,7 +66,7 @@ export default function App() {
     const [mode, setMode] = useState('practice'); 
     const [selectedLessonId, setSelectedLessonId] = useState(AVAILABLE_LESSONS[0].id);
 
-    const activeMatchesRef = useRef(new Map()); // midi -> { index, startBeat, durationBeats }
+    // activeMatchesRef removed
 
     // Custom Hook: Timeline Manager
     const { 
@@ -99,12 +91,29 @@ export default function App() {
         setPaused
     } = usePlayback(lessonMeta, tempoFactor, LEAD_IN_SECONDS);
 
+    // Custom Hook: MIDI System
+    const { 
+        midiSupported, 
+        log, 
+        setLog, 
+        playheadFlash, 
+        pulseActive, 
+        pulseColor,
+        resetMidiState
+    } = useMidiSystem(
+        timelineRef, 
+        scrollOffsetRef, 
+        lessonMeta, 
+        pausedRef, 
+        { beatTolerance, validateNoteLength }
+    );
+
     // Effect: Reset playback when timeline changes
     useEffect(() => {
         const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
         const startScroll = (-LEAD_IN_SECONDS * baseSpeed) / tempoFactor;
         resetPlayback(startScroll, -LEAD_IN_SECONDS);
-        setLog(l => [...l, `Loaded ${mode} timeline`]);
+        setLog(l => [...l, `Loaded ${mode} timeline`]); // Use setLog
     }, [timelineVersion]);
 
 
@@ -265,25 +274,10 @@ export default function App() {
     useEffect(() => { loadTimeline(); }, [mode, selectedLessonId, minNote, maxNote, includeSharps]);
     useEffect(() => { renderCurrentTimeline(); }, [viewportWidth, showValidTiming, lessonMeta, beatTolerance]);
 
-    function flashPlayhead(color) {
-        setPlayheadFlash(color);
-        setPulseColor(color || 'red');
-        setPulseActive(true);
-        window.setTimeout(() => {
-            setPlayheadFlash(null);
-            setPulseActive(false);
-        }, 220);
-    }
-
     const togglePause = () => {
         // Toggle pause via engine, but also clear validation state if pausing
-        // The engine returns the NEW state? No, togglePause returns void.
-        // We can check 'paused' state, but it won't update immediately in this closure.
-        // So we can assume !paused is the new state if we are toggling.
-        // Actually, safer to just clear.
         if (!paused) {
-            validatedNotesRef.current.clear();
-            recentMidiEventsRef.current.clear();
+            resetMidiState();
         }
         engineTogglePause();
     };
@@ -295,8 +289,7 @@ export default function App() {
         
         resetPlayback(startOffset, -LEAD_IN_SECONDS);
         
-        validatedNotesRef.current.clear();
-        recentMidiEventsRef.current.clear();
+        resetMidiState();
         setLog(l => [...l, '🔄 Restarted']);
     };
 
