@@ -7,6 +7,10 @@ import { initializeMidi } from './midi/MidiInput';
 import { exampleJSONLesson, exampleMusicXML, parseTimeline, AVAILABLE_LESSONS } from './parser/TimeLineParser';
 import LogDisplay from './components/LogDisplay';
 import LessonDisplay from './components/LessonDisplay';
+import SettingsPanel from './components/SettingsPanel';
+import ControlPanel from './components/ControlPanel';
+import Header from './components/Header';
+import Sidebar from './components/Sidebar';
 import { audioSynth } from './audio/AudioSynth';
 import { parsePitchToMidi, midiToVexKey } from './core/musicUtils';
 import { generateRandomTimeline } from './core/NoteGenerator';
@@ -406,25 +410,8 @@ export default function App() {
     return (
         <div className="flex h-screen w-full bg-brand-bg font-sans select-none text-gray-800 overflow-hidden">
             
-            {/* COLORFUL SIDEBAR - Now with Fixed Positioning for robustness */}
-            <aside className="fixed left-0 top-0 w-16 h-full bg-gradient-to-b from-brand-primary via-brand-accent to-brand-primary flex flex-col items-center py-6 shadow-2xl z-[100] border-r border-white/10">
-                <button 
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="w-10 h-10 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-xl transition-all active:scale-95 shadow-inner"
-                    title="Menu"
-                >
-                    <div className="flex flex-col gap-1">
-                        <span className={`w-5 h-0.5 bg-white transition-all ${isMenuOpen ? 'rotate-45 translate-y-1.5' : ''}`}></span>
-                        <span className={`w-5 h-0.5 bg-white transition-all ${isMenuOpen ? 'opacity-0' : ''}`}></span>
-                        <span className={`w-5 h-0.5 bg-white transition-all ${isMenuOpen ? '-rotate-45 -translate-y-1.5' : ''}`}></span>
-                    </div>
-                </button>
-                
-                <div className="mt-auto flex flex-col gap-4 mb-6">
-                    <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white text-xl shadow-lg border border-white/5">♫</div>
-                    <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white text-xl shadow-lg border border-white/5">♥</div>
-                </div>
-            </aside>
+            {/* COLORFUL SIDEBAR */}
+            <Sidebar isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} />
 
             {/* MAIN CONTENT Area - Padded to make room for fixed sidebar */}
             <main className="ml-16 flex-1 h-full overflow-y-auto relative flex flex-col">
@@ -465,23 +452,7 @@ export default function App() {
                 )}
 
                 {/* Top Navbar */}
-                <header className="bg-white/90 backdrop-blur-md px-8 py-4 sticky top-0 z-40 border-b border-gray-100 flex items-center justify-between shadow-sm">
-                    <div className="flex items-center gap-4">
-                        <span className="text-3xl">🎹</span>
-                        <h1 className="text-2xl font-black tracking-tight text-gray-800">
-                            Piano <span className="text-brand-primary font-comic">Master</span>
-                        </h1>
-                    </div>
-                    
-                    <div className="flex items-center gap-4">
-                        <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm border ${
-                            midiSupported ? 'bg-green-50 border-green-100 text-green-600' : 'bg-amber-50 border-amber-100 text-amber-600'
-                        }`}>
-                            <span className={`w-2 h-2 rounded-full ${midiSupported ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}`}></span>
-                            {midiSupported ? 'MIDI Connected' : 'No MIDI Found'}
-                        </div>
-                    </div>
-                </header>
+                <Header midiSupported={midiSupported} />
 
                 {/* Main Dashboard */}
                 <div className="flex-1 p-6 md:p-10 max-w-6xl mx-auto w-full space-y-10">
@@ -603,130 +574,29 @@ export default function App() {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                         
                         {/* Control Panel */}
-                        <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border border-gray-50 flex flex-col gap-8">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-xl font-black text-gray-800 flex items-center gap-3 italic">
-                                    <span className="w-2.5 h-8 bg-brand-primary rounded-full"></span>
-                                    Dashboard
-                                </h3>
-                                <button onClick={restart} className="text-[10px] font-black text-brand-primary bg-brand-bg px-4 py-2 rounded-xl hover:bg-violet-100 transition-colors tracking-tighter">
-                                    RESTART SESSION
-                                </button>
-                            </div>
-                            
-                            <button 
-                                onClick={togglePause} 
-                                className={`w-full py-6 font-black rounded-[2rem] transition-all active:scale-[0.97] shadow-xl text-lg ${
-                                    paused 
-                                        ? 'bg-green-500 hover:bg-green-600 text-white shadow-green-100' 
-                                        : 'bg-brand-secondary hover:bg-amber-500 text-white shadow-amber-100'
-                                }`}
-                            >
-                                {paused ? '▶ START PLAYING' : '⏸ PAUSE SCROLL'}
-                            </button>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                <div className="space-y-4">
-                                    <div className="flex justify-between text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
-                                        <span>Tempo</span>
-                                        <span className="text-brand-primary">{tempoFactor.toFixed(1)}x</span>
-                                    </div>
-                                    <input
-                                        type="range" min="0.5" max="3.0" step="0.1" value={tempoFactor}
-                                        onChange={(e) => setTempoFactor(Number(e.target.value))}
-                                        className="w-full accent-brand-primary h-2.5 bg-gray-100 rounded-full appearance-none cursor-pointer"
-                                    />
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="flex justify-between text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
-                                        <span>Volume</span>
-                                    </div>
-                                    <input
-                                        type="range" min="0" max="1" step="0.05" defaultValue="0.3"
-                                        onChange={(e) => audioSynth.setVolume(Number(e.target.value))}
-                                        className="w-full accent-brand-accent h-2.5 bg-gray-100 rounded-full appearance-none cursor-pointer"
-                                    />
-                                </div>
-                            </div>
-                        </div>
+                        <ControlPanel
+                            paused={paused}
+                            togglePause={togglePause}
+                            restart={restart}
+                            tempoFactor={tempoFactor}
+                            setTempoFactor={setTempoFactor}
+                        />
 
                         {/* Settings Side Panel */}
-                        <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border border-gray-50 flex flex-col">
-                            <h3 className="text-xl font-black text-gray-800 mb-8 flex items-center gap-3 italic">
-                                <span className="w-2.5 h-8 bg-brand-secondary rounded-full"></span>
-                                Settings
-                            </h3>
-
-                            {mode === 'practice' ? (
-                                <div className="space-y-6 flex-1 flex flex-col">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-brand-bg/50 p-4 rounded-3xl border border-white shadow-inner">
-                                            <span className="text-[10px] font-black text-gray-400 uppercase block text-center mb-1">Min</span>
-                                            <input value={minNote} onChange={(e) => setMinNote(e.target.value)} className="w-full bg-transparent text-center font-black text-xl text-brand-primary outline-none" />
-                                        </div>
-                                        <div className="bg-brand-bg/50 p-4 rounded-3xl border border-white shadow-inner">
-                                            <span className="text-[10px] font-black text-gray-400 uppercase block text-center mb-1">Max</span>
-                                            <input value={maxNote} onChange={(e) => setMaxNote(e.target.value)} className="w-full bg-transparent text-center font-black text-xl text-brand-primary outline-none" />
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-3">
-                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block ml-1 text-center">Note Types</span>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {[
-                                                { id: 'whole', label: 'Whole (1/1)' },
-                                                { id: 'half', label: 'Half (1/2)' },
-                                                { id: 'quarter', label: 'Quarter (1/4)' },
-                                                { id: 'eighth', label: 'Eighth (1/8)' },
-                                                { id: 'sixteenth', label: '16th (1/16)' }
-                                            ].map(({ id, label }) => (
-                                                <label key={id} className={`flex items-center gap-2 p-2 rounded-xl transition-all border cursor-pointer ${
-                                                    id === 'quarter' ? 'bg-violet-50 border-violet-100 opacity-80 cursor-default' : 'bg-gray-50 border-transparent hover:bg-gray-100 hover:border-white'
-                                                }`}>
-                                                    <input 
-                                                        type="checkbox" 
-                                                        checked={id === 'quarter' ? true : enabledDurations[id]} 
-                                                        disabled={id === 'quarter'}
-                                                        onChange={(e) => setEnabledDurations(prev => ({ ...prev, [id]: e.target.checked }))} 
-                                                        className="w-4 h-4 accent-brand-primary rounded shadow-sm" 
-                                                    />
-                                                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-tighter">{label}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-3">
-                                        <label className="flex items-center gap-4 p-4 bg-gray-50 rounded-3xl hover:bg-gray-100 transition-colors cursor-pointer border-2 border-transparent hover:border-white">
-                                            <input type="checkbox" checked={includeSharps} onChange={(e) => setIncludeSharps(e.target.checked)} className="w-6 h-6 accent-brand-secondary rounded-lg" />
-                                            <span className="font-black text-gray-600 text-xs uppercase tracking-widest">Sharps</span>
-                                        </label>
-
-                                        <label className="flex items-center gap-4 p-4 bg-gray-50 rounded-3xl hover:bg-gray-100 transition-colors cursor-pointer border-2 border-transparent hover:border-white">
-                                            <input type="checkbox" checked={validateNoteLength} onChange={(e) => setValidateNoteLength(e.target.checked)} className="w-6 h-6 accent-brand-accent rounded-lg" />
-                                            <span className="font-black text-gray-600 text-xs uppercase tracking-widest">Validate Hold</span>
-                                        </label>
-                                    </div>
-
-                                    <button 
-                                        onClick={() => loadTimeline()}
-                                        className="mt-auto w-full py-5 font-black bg-brand-secondary hover:bg-amber-600 text-white rounded-3xl transition-all shadow-xl shadow-amber-100 active:scale-95 text-xs uppercase tracking-[0.2em]"
-                                    >
-                                        Generate
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6">
-                                    <div className="w-24 h-24 bg-brand-bg rounded-full flex items-center justify-center text-5xl shadow-inner border border-white">📜</div>
-                                    <div className="space-y-2">
-                                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Playing</div>
-                                        <div className="font-black text-brand-primary text-xl leading-tight">{exampleJSONLesson.title}</div>
-                                    </div>
-                                    <p className="text-xs text-gray-400 font-medium px-4 leading-relaxed leading-relaxed italic opacity-80">"Every master was once a beginner. Keep practice!"</p>
-                                </div>
-                            )}
-                        </div>
+                        <SettingsPanel
+                            mode={mode}
+                            minNote={minNote}
+                            setMinNote={setMinNote}
+                            maxNote={maxNote}
+                            setMaxNote={setMaxNote}
+                            enabledDurations={enabledDurations}
+                            setEnabledDurations={setEnabledDurations}
+                            includeSharps={includeSharps}
+                            setIncludeSharps={setIncludeSharps}
+                            validateNoteLength={validateNoteLength}
+                            setValidateNoteLength={setValidateNoteLength}
+                            onGenerate={() => loadTimeline()}
+                        />
                     </div>
 
                     {/* Developer Console (Bounded & Conditional) */}
