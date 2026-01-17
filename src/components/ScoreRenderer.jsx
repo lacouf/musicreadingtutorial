@@ -34,6 +34,9 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     const bassStave = new Stave(marginLeft, bassY, staveWidth).addClef("bass").addTimeSignature("4/4");
     bassStave.setContext(stavesCtx).draw();
 
+    // Calculate where the notes should start (after clef/time sig) to define clipping region
+    const notesStartX = trebleStave.getNoteStartX();
+
     const tempo = opts.tempo || 60; 
     const beatsPerMeasure = opts.beatsPerMeasure || 4;
     const secPerBeat = TIMING.SECONDS_IN_MINUTE / tempo;
@@ -202,5 +205,5 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         }
     }
 
-    return Promise.resolve();
+    return Promise.resolve({ notesStartX });
 }

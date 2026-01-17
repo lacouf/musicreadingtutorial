@@ -61,6 +61,7 @@ export default function App() {
     const playheadX = RENDERING.PLAYHEAD_X;
     const [viewportWidth, setViewportWidth] = useState(RENDERING.VIEWPORT_WIDTH);
     const viewportHeight = RENDERING.VIEWPORT_HEIGHT;
+    const [clipX, setClipX] = useState(0);
 
     const [tempoFactor, setTempoFactor] = useState(DEFAULT_TEMPO);
     const [minNote, setMinNote] = useState('C4');
@@ -96,7 +97,12 @@ export default function App() {
             beatsPerMeasure: lessonMeta.beatsPerMeasure,
             beatTolerance: beatTolerance
         })
-            .then(() => setRenderTrigger(t => t + 1))
+            .then((result) => {
+                setRenderTrigger(t => t + 1);
+                if (result && result.notesStartX) {
+                    setClipX(result.notesStartX);
+                }
+            })
             .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
     };
 
@@ -133,6 +139,54 @@ export default function App() {
         }
 
         setLessonMeta(newMeta);
+
+        // Reset scroll position for new timeline
+        const speed = calculateScrollSpeed(newMeta.tempo, RENDERING.PIXELS_PER_BEAT);
+        const newInitialScroll = (-LEAD_IN_SECONDS * speed) / DEFAULT_TEMPO; 
+        // Note: speed calculation might need adjustment if logic changed, but standard formula is:
+        // scroll = beats * pixelsPerBeat. 
+        // time = -3s. beats = time / secPerBeat = -3 / (60/tempo).
+        // scroll = (-3 * tempo / 60) * pixelsPerBeat.
+        
+        // Using existing logic from initial state:
+        // const defaultSpeed = calculateScrollSpeed(80, RENDERING.PIXELS_PER_BEAT);
+        // const initialScroll = (-LEAD_IN_SECONDS * defaultSpeed) / DEFAULT_TEMPO;
+        // Wait, calculateScrollSpeed returns pixels/second or something?
+        // Let's check calculateScrollSpeed import. 
+        
+        // Actually simpler: 
+        // Beat 0 is at 0. We want playhead (at playheadX) to be at time -LEAD_IN.
+        // ScrollOffset is in pixels.
+        // If we want time -3s to be at playhead.
+        // The canvas draws at sx = scrollOffset.
+        // If scrollOffset is negative, we draw from 0 at dx = -scrollOffset.
+        // If dx = playheadX, then time 0 is at playheadX.
+        // So scrollOffset should be -playheadX?
+        // No, current logic is a bit complex with speed.
+        
+        // Let's look at how scrollOffset is initialized:
+        // const initialScroll = (-LEAD_IN_SECONDS * defaultSpeed) / DEFAULT_TEMPO;
+        
+        // I will just use the same logic but with new tempo.
+        const baseSpeed = calculateScrollSpeed(newMeta.tempo, RENDERING.PIXELS_PER_BEAT);
+        // We want to start at -LEAD_IN_SECONDS.
+        // distance = time * speed.
+        // scroll = -LEAD_IN_SECONDS * baseSpeed.
+        // (The / DEFAULT_TEMPO in original code might be a mistake or factor? 
+        //  Ah, tempoFactor is initialized to DEFAULT_TEMPO.
+        //  currentSpeed = baseSpeed / tempoFactor.
+        //  So if tempoFactor=DEFAULT_TEMPO, currentSpeed = baseSpeed/DEFAULT_TEMPO.
+        //  So dist = time * (baseSpeed/DEFAULT_TEMPO).
+        //  This seems to imply baseSpeed is "pixels per second at tempo 1.0"?
+        //  Let's trust the initialization logic for now and just replicate it.)
+        
+        const startScroll = (-LEAD_IN_SECONDS * baseSpeed) / tempoFactor;
+        
+        setScrollOffset(startScroll);
+        scrollOffsetRef.current = startScroll;
+        totalActiveTimeRef.current = -LEAD_IN_SECONDS;
+        setPaused(true);
+        pausedRef.current = true;
 
         const normalizedTimeline = rawTimeline.map(ev => {
             const pitchSource = ev.midi ?? ev.pitch ?? ev.key ?? ev.note ?? ev.name ?? ev.vfKey ?? (Array.isArray(ev.keys) ? ev.keys[0] : '') ;
@@ -483,6 +537,7 @@ export default function App() {
                                 playheadX={playheadX}
                                 playheadFlash={playheadFlash}
                                 renderTrigger={renderTrigger}
+                                clipX={clipX}
                             />
 
                             <div
