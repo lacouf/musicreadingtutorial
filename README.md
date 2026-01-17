@@ -1,294 +1,201 @@
-This is a music learning/tutorial application built with React and VexFlow. It's essentially an interactive piano practice tool that works like a "Guitar Hero" for learning piano.
-
-Main Features:
-
-1. Scrolling Sheet Music
-- Displays musical notation on a grand staff (treble + bass clefs) that scrolls horizontally from right to left
-- Notes scroll toward a fixed red playhead at 300px from the left edge
-
-2. MIDI Keyboard Integration
-- Connects to a USB MIDI keyboard via the Web MIDI API
-- Listens for note on/off events in real-time
-
-3. Note Validation
-- Checks if you play the correct note at the correct time (within a ~0.35 second window)
-- Flashes the playhead different colors for visual feedback (correct/incorrect)
-- Logs detailed debug information about played notes vs expected notes
+# Music Master
 
-4. Playback Controls
-- Pause/Resume button or spacebar to pause scrolling
-- Tempo slider (0.5x - 3.0x) to slow down or speed up the music scrolling speed
-- Starts paused by default
+**Interactive piano practice application** - Learn to read sheet music while playing along with scrolling notation.
 
-5. Music Parsing
-- Supports both JSON and MusicXML lesson formats (currently using JSON)
-- Parses pitch information and converts between different formats (MIDI numbers, VexFlow keys)
+Music Master combines the engaging gameplay of rhythm games like Guitar Hero with proper musical notation. Notes scroll horizontally across a grand staff toward a playhead, and you play them on your MIDI keyboard at the right time. Perfect for learning sight-reading and building muscle memory!
 
-Tech Stack:
-- React 19 + Vite
-- VexFlow (music notation rendering library)
-- Web MIDI API
-- Canvas for rendering
+---
 
-The app is currently in a "minimal starter" state with several suggested improvements listed in the UI (src/App.jsx:249-257).
+## Features
 
-IMPROVMENTS NOTES FROM ChatGPT and Claude
+- **Scrolling Sheet Music** - Grand staff notation (treble + bass clefs) rendered with VexFlow 5.0
+- **MIDI Keyboard Integration** - Real-time input from USB MIDI keyboards via Web MIDI API
+- **Note Validation** - Beat-based timing validation with visual feedback (green = correct, red = incorrect)
+- **Audio Synthesis** - Built-in piano synthesizer using Web Audio API
+- **Practice Mode** - Generate random exercises with customizable note ranges and durations
+- **Built-in Lessons** - Pre-composed lessons including "Polyphonic Chords" and "Rhythm & Beaming"
+- **Playback Controls** - Pause/resume (spacebar), tempo adjustment (0.5x-3.0x), restart
+- **Detailed Logging** - Developer tools for tracking note events and validation results
+- **Responsive UI** - Modern interface built with React and Tailwind CSS
 
+---
 
-What do you think of the following plan to improve this application ton include measure, beats and note value like black, white, ...: Plan — incrementally add measures and accurate note values
-(white/black heads) to the app
+## Requirements
 
-Data model: represent measures, beats and exact durations
+- **Node.js** (v18 or higher recommended)
+- **Modern web browser** with Web MIDI API and Web Audio API support (Chrome, Edge, Opera)
+- **USB MIDI keyboard** (recommended but not required - useful for actual practice)
 
-Extend timeline entries to include: measure, beat, beatFraction, durationBeats (float), timeSec and midi.
-Keep start as seconds but compute it from measure/beat using tempo and time signature.
-Files: update parser/TimeLineParser to output these fields.
+---
 
-Duration mapping & notation types
-Map beat durations to VexFlow durations (whole = "w", half = "h", quarter = "q", eighth = "8", etc.) and determine whether notehead is filled (black) or open (white) by duration.
-Support dotted and tuplets by deriving dots and tuplet fields.
-Files: components/ScoreRenderer — replace simple duration heuristic with a converter using durationBeats -> {duration, dots, isTuplet, noteheadStyle}.
+## Installation
 
-Measures, staff layout & barlines
-Group timeline events into measures by time signature and measure index.
-Render measures explicitly: draw barlines, measure numbering, and ensure notes are placed relative to measure beat positions (not global pixel positions only).
-Files: components/ScoreRenderer, components/ScrollingCanvas (layout/width per measure).
+```bash
+npm install
+```
 
-Precise timing: beat -> px mapping
-Replace ad-hoc pixelsPerSecond with pixelsPerBeat derived from BPM and pixelsPerSecond = pixelsPerBeat * BPM/60.
-Use timeSec = (measure * beatsPerMeasure + beatOffset) * 60 / BPM.
-This yields consistent alignment between notation and playhead regardless of tempoFactor.
-Files: src/App.jsx (animation loop, scrollOffset calculation), core/validation (matching logic).
+---
+
+## Usage
+
+### Development Mode
+```bash
+npm run dev
+```
+Opens at `http://localhost:5173` (default Vite port)
 
-Validation: quantize and per-measure matching
-When MIDI arrives:
-Compute playhead beat time (in beats and measure).
-Find candidate notes in same measure and within a small beat window (e.g. ±0.25 beats).
-Prefer exact pitch+beat match; allow tolerance for early/late input by configurable beat tolerance.
-Use durationBeats and beat to decide which note was intended when overlapping.
-Files: core/validation, src/App.jsx (MIDI handler changes).
+### Production Build
+```bash
+npm run build
+npm run preview
+```
 
-Rendering details: white vs black heads, stems, beams, rests
-Use VexFlow note options:
-duration + dots to get open/filled heads and stems.
-Render rests for timeline events marked as rest.
-Implement beaming: group consecutive eighth/sixteenth notes inside a measure and create Beam objects.
-Files: components/ScoreRenderer.
+### Testing & Linting
+```bash
+npm test          # Run unit tests with Vitest
+npm run lint      # Lint code with ESLint
+```
+
+---
 
-Parser & input formats
-Update parser/TimeLineParser to:
-Extract measure numbers and beat positions from MusicXML.
-Export durations in beats (relative to numerator/denominator).
-Provide sample JSON format with measures/beat info for testing.
-Files: parser/TimeLineParser, sample inputs in examples/.
+## How to Use
 
-UI controls & debugging
-Add controls to set time signature (e.g. 4/4, 3/4), BPM, and beat-tolerance slider.
-Show overlays in LogDisplay showing current measure/beat and nearest expected note.
-Files: src/App.jsx (UI), components/LogDisplay.
-Tests & verification
+1. **Connect MIDI Keyboard** (optional)
+   - Plug in your USB MIDI keyboard
+   - Check the header for "MIDI: Connected" status
 
-Unit tests:
-parser tests: MusicXML -> timeline with measure/beat/duration mapping.
-duration converter tests: beat counts -> VexFlow duration/dots/tuplet mapping.
-validation tests: given a synthetic timeline and scroll offset, incoming MIDI note matches intended event with various latencies.
+2. **Choose Mode**
+   - **Lesson Mode**: Select from pre-built lessons in the sidebar
+   - **Practice Mode**: Configure custom exercises (note range, durations, etc.)
 
-Visual tests:
-Render test cases: whole, half, dotted, triplet group, beamed eighths.
-Files: __tests__/parser.test.js, __tests__/duration.test.js, __tests__/validation.test.js.
-Incremental rollout (priority)
-Phase A (high): implement duration mapping, parser output change, VexFlow duration converter, and validation quantization.
-Phase B (medium): measure grouping, barlines, pixels-per-beat alignment, UI controls.
-Phase C (low): beaming, tuplets, multi-voice, graceful MusicXML edge cases and performance tuning.
+3. **Adjust Settings**
+   - **Tempo Slider**: Speed up (3.0x) or slow down (0.5x) the scrolling speed
+   - **Note Range**: Set min/max MIDI notes for practice exercises
+   - **Duration Filters**: Toggle which note types to include (whole, half, quarter, etc.)
+   - **Beat Tolerance**: Adjust timing strictness (0.01-0.40 beats)
 
-**Claude recommandation**
+4. **Play Along**
+   - Press Play or tap Spacebar to start scrolling
+   - Play notes on your MIDI keyboard when they reach the red playhead
+   - Watch for green flashes (correct) or red flashes (incorrect/late)
 
-This is a well-structured and comprehensive plan! The phased approach is smart, and you're tackling the right fundamental issues. Here's my analysis:
+5. **Review Performance**
+   - Check the log display for detailed validation results
+   - See which notes were played correctly/incorrectly and timing accuracy
 
-Strengths
+---
 
-✅ Correct core insight: Moving from pure time-based (pixelsPerSecond) to beat-based positioning is essential for proper musical notation
+## Tech Stack
 
-✅ Incremental phases: Phase A → B → C prioritization is logical—getting duration/validation right before tackling beaming/tuplets
+- **React 19** - UI framework
+- **Vite** - Fast build tool and dev server
+- **VexFlow 5.0** - Music notation engraving library
+- **Tailwind CSS** - Utility-first styling
+- **Web MIDI API** - USB MIDI keyboard input
+- **Web Audio API** - Real-time audio synthesis
+- **Vitest** - Unit testing framework
 
-✅ Dual representation: Keeping both timeSec and measure/beat gives flexibility for rendering vs playback
+---
 
-✅ Test coverage: Planning unit tests for parser, duration mapping, and validation is excellent
+## Project Structure
 
-Potential Issues & Recommendations
+```
+src/
+├── App.jsx                      # Main application component
+├── components/                  # UI components (Header, Sidebar, Controls, etc.)
+├── hooks/                       # Custom hooks (usePlayback, useTimeline, useMidiSystem)
+├── core/                        # Core utilities (validation, duration mapping, layout)
+├── parser/                      # Music format parsers (JSON, MusicXML)
+├── midi/                        # MIDI input handling
+└── audio/                       # Audio synthesis
+```
 
-1. Source of truth for timing
+---
 
-⚠️ Be careful with timeSec vs measure/beat sync. I'd recommend:
-- Measure/beat is canonical (musical truth)
-- timeSec is computed/cached from measure/beat + tempo
-- Recalculate timeSec only when tempo changes
+## Development
 
-2. Measure width calculation (not fully detailed)
+### Adding New Lessons
 
-The scrolling system assumes notes at fixed pixel positions. With measures, you need:
-- Fixed-width measures (easier, but may look cramped/sparse), OR
-- Variable-width measures (proportional spacing, but requires recalculating all X positions)
+Create a new JSON file in `src/parser/` with this structure:
 
-Suggestion: Start with fixed-width measures in Phase A, defer proportional spacing to Phase C.
+```javascript
+{
+  "title": "Your Lesson Name",
+  "tempo": 120,
+  "timeSignature": { "numerator": 4, "denominator": 4 },
+  "notes": [
+    {
+      "measure": 1,
+      "beat": 1,
+      "beatFraction": 0,
+      "durationBeats": 1.0,
+      "timeSec": 0.0,
+      "pitch": "C4",
+      "midi": 60,
+      "vfKey": "c/4"
+    },
+    // ... more notes
+  ]
+}
+```
 
-3. VexFlow formatter complexity
+Import and add it to the lesson selector in `hooks/useTimeline.js`.
 
-Your current code manually sets TickContext.setX() to bypass VexFlow's formatter. When adding measures/barlines:
-- You'll need to use VexFlow's Formatter.format() for proper note spacing within measures
-- This is a significant change from your current approach
-- Phase B might be bigger than expected
+### Running Tests
 
-4. Tempo & time signature changes
+```bash
+npm test                         # Run all tests
+npm test -- core/validation      # Run specific test file
+npm test -- --coverage           # Generate coverage report
+```
 
-The plan assumes single tempo/time signature. If the JSON/MusicXML has changes mid-piece:
-- Need tempoMap[] and timeSigMap[] arrays
-- Each timeline event needs to reference which tempo/timesig applies
-- Calculation becomes: timeSec = integrate(measures[0..m], considering tempo changes)
+### Code Organization
 
-Suggestion: Explicitly note this as Phase C, or document assumption of "single tempo/timesig for MVP".
+- **Custom hooks** manage state and side effects (playback, MIDI, timeline)
+- **Components** are presentational and receive props from hooks
+- **Core utilities** contain pure functions (no React dependencies)
+- **Tests** are colocated with source files in `__tests__/` directories
 
-5. Parser effort (may be underestimated)
+---
 
-MusicXML parsing is hard:
-- Measure numbering, part-wise vs time-wise, repeats, grace notes, ornaments...
-- Phase A says "update parser" but this could be 30-50% of total work
+## Roadmap
 
-Suggestion:
-- Create a simple JSON schema first with all required fields (measure, beat, durationBeats)
-- Manually author 2-3 test lessons in JSON
-- Defer full MusicXML parsing to Phase C
+This project has successfully implemented beat-based, measure-aware musical notation (Phase A complete). See [ROADMAP.md](ROADMAP.md) for detailed status and future plans:
 
-6. Validation quantization parameters
+- **Phase A (Data Model & Duration Mapping)**: ✅ **COMPLETED** - Beat-based positioning, duration converter, beat-based validation, MusicXML parser
+- **Phase B (Measures, Layout & Barlines)**: ⚠️ **PARTIALLY COMPLETED** - Barlines ✅, beaming ✅, measure numbers ❌, time signature selector ❌, current measure/beat display ❌
+- **Phase C (Advanced Features)**: ⚠️ **IN PROGRESS** - Automatic beaming ✅, rests/tuplets/multi-voice ❌, tempo changes ❌
 
-You mention ±0.25 beats tolerance. This needs careful tuning:
-- Beginners need ~±0.5 beats
-- Advanced players expect ±0.1 beats
-- Should vary by tempo (slower = tighter tolerance in seconds)
+**Current Status**: Core functionality complete. UI enhancements and advanced notation features remain.
 
-Suggestion: Make beatTolerance user-configurable and tempo-aware (e.g., toleranceSec = beatTolerance * 60/BPM).
+---
 
-7. Scrolling with measures
+## Browser Compatibility
 
-Currently, notes scroll smoothly. With measures:
-- Do measure barlines scroll through the viewport?
-- Or do measures "snap" into view?
-- How do you handle a measure that's wider than the viewport?
+| Feature | Chrome | Edge | Firefox | Safari |
+|---------|--------|------|---------|--------|
+| Web MIDI API | ✅ Yes | ✅ Yes | ❌ No | ❌ No |
+| Web Audio API | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| Canvas/VexFlow | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
 
-Suggestion: Keep smooth scrolling; barlines just scroll like notes. Address in Phase B UI design.
+**Note:** MIDI keyboard support requires Chrome, Edge, or Opera. Firefox and Safari do not support Web MIDI API.
 
-8. Phase A scope
+---
 
-Phase A is very ambitious for a "high priority" phase:
-- Parser changes
-- Duration mapping
-- Validation quantization
-- Data model changes
+## Contributing
 
-Suggestion: Split into Phase A1 and A2:
-- A1: JSON schema + duration mapping + white/black heads (no measure grouping yet)
-- A2: Beat-based validation + quantization
+Contributions welcome! Please follow the existing code style and add tests for new features.
 
-Recommended Implementation Order
+---
 
-1. Create JSON schema with measure/beat/durationBeats (manual test data)
-2. Write duration converter (durationBeats → VexFlow duration/dots)
-3. Update ScoreRenderer to use duration converter (white/black heads)
-4. Test rendering with manual JSON
-5. Add beat-based validation (quantization)
-6. Update parser to output new schema (simplified JSON → JSON first)
-7. Add measure grouping + barlines (Phase B)
-8. Integrate VexFlow Formatter for proper measure spacing (Phase B)
-9. MusicXML parsing + beaming/tuplets (Phase C)
+## License
 
-Files You'll Likely Need to Add
+This project is for educational purposes.
 
-src/core/durationConverter.js  // durationBeats → VexFlow duration
-src/core/timeMapper.js          // measure/beat ↔ timeSec conversions
-src/parser/schemas.js           // JSON schema definition
-__tests__/durationConverter.test.js
-__tests__/timeMapper.test.js
+---
 
-  ---
-Overall verdict: This is a solid plan! My main advice is to start smaller (manual JSON, simple durations) before tackling MusicXML parsing and complex beaming. The phased approach is right, but
-Phase A could be split further.
+## Acknowledgments
 
-**ANALYSIS TO CONVERT TO SOURCE OF TRUTH FOR TIMING**
-
-Based on my analysis, here's a comprehensive plan for changing the duration mapping to Measure/beat as canonical while keeping timeSec for where it's needed:
-
-Plan: Refactor Duration Mapping to Measure/Beat as Canonical
-
-Phase 1: Extend Data Structures
-
-1. Update timeline entry format to include measure/beat information:
-   {
-   measure: 1,           // 1-indexed measure number
-   beat: 1,              // 1-indexed beat within measure
-   beatFraction: 0,      // 0-1 (for sixteenth notes, triplets, etc.)
-   durationBeats: 1.0,   // Duration in beats (float for dotted notes)
-   timeSec: 0.0,         // Computed from measure/beat + tempo (cached)
-   pitch: 'C4',
-   midi: 60
-   }
-2. Add time signature support to lesson structure:
-   {
-   title: string,
-   tempo: number,
-   timeSignature: { numerator: 4, denominator: 4 },  // Default 4/4
-   notes: TimelineEntry[]
-   }
-
-Phase 2: Parser Updates (TimeLineParser.js)
-
-1. Extract measure/beat from MusicXML instead of just converting to seconds
-2. Parse time signatures from <attributes> in MusicXML
-3. Compute timeSec from measure/beat using formula:
-   timeSec = (measure - 1) * beatsPerMeasure * 60/BPM + (beat - 1 + beatFraction) * 60/BPM
-4. Handle duration encoding: Map beat durations → durationBeats (not arbitrary time thresholds)
-
-Phase 3: Rendering Updates (ScoreRenderer.jsx)
-
-1. Replace time-based duration logic with beat-based logic:
-   // OLD: dur >= 1.5 ? "h" : "q"
-   // NEW: durationBeats >= 2.0 ? "h" : "q"
-2. Use beat-aligned positioning: pixelsPerBeat = pixelsPerSecond * 60 / BPM
-3. Keep timeSec for actual positioning (no change to pixel calculations)
-
-Phase 4: Validation Updates (validation.js & App.jsx)
-
-1. Replace time-based tolerance with beat-based:
-   // OLD: tolerance = 0.3 seconds
-   // NEW: toleranceSec = 0.5 * 60 / BPM (0.5 beats)
-2. Update findEventsInWindow() to work with measure/beat when displaying feedback
-3. Keep timeSec for internal playback logic (scrollOffset calculations)
-
-Phase 5: Playback & Animation (No changes needed)
-
-- scrollOffset and pixelsPerSecond continue working as-is
-- tempoFactor adjustment continues to work
-- Only the interpretation of what notes mean changes
-
-Phase 6: UI/Display Enhancements (Optional but recommended)
-
-1. Add measure/beat display at top of canvas
-2. Show validation feedback as "Beat X.Y" instead of "X seconds"
-3. Display measure lines for visual guidance
-
-  ---
-Benefits of This Approach
-
-✅ Measure/beat becomes the source of truth for musical meaning✅ timeSec remains as cached computed value for fast rendering/playback✅ Backward compatible scrolling - no changes to pixel
-animation✅ Better validation feedback - users see "You're late by 0.3 beats" not "You're late by 0.225 seconds"✅ Extensible for future features - tempo maps, time signature changes, dotted notes,
-tuplets
-
-  ---
-Implementation Order (by impact & dependencies)
-
-1. Phase 1 (data structure) - Foundation for everything else
-2. Phase 2 (parser) - Generate new data correctly
-3. Phase 3 (rendering) - Use measure/beat for decisions
-4. Phase 4 (validation) - Make feedback beat-aware
-5. Phase 5 (playback) - Verify nothing broke
-6. Phase 6 (UI) - Polish and user experience
-
+- **VexFlow** - Excellent music notation rendering library
+- **Web MIDI API** - Enables browser-based MIDI keyboard integration
+- **React & Vite** - Modern development experience
