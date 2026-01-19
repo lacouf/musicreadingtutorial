@@ -8,7 +8,7 @@ export function usePlayback(lessonMeta, tempoFactor, leadInSeconds) {
     const pausedRef = useRef(true);
     
     const animationFrameId = useRef(null);
-    const lastFrameTimeRef = useRef(0);
+    const lastFrameTimeRef = useRef(null);
     const totalActiveTimeRef = useRef(-leadInSeconds);
     const scrollOffsetRef = useRef(0);
 
@@ -21,13 +21,17 @@ export function usePlayback(lessonMeta, tempoFactor, leadInSeconds) {
     useEffect(() => {
         if (paused) {
             cancelAnimationFrame(animationFrameId.current);
-            lastFrameTimeRef.current = 0;
+            lastFrameTimeRef.current = null;
             return;
         }
 
         const animate = (timestamp) => {
-            if (!lastFrameTimeRef.current) lastFrameTimeRef.current = timestamp;
+            if (lastFrameTimeRef.current === null) {
+                // console.log('usePlayback: First frame at', timestamp);
+                lastFrameTimeRef.current = timestamp;
+            }
             const deltaTime = (timestamp - lastFrameTimeRef.current) / 1000;
+            // console.log('usePlayback: deltaTime', deltaTime);
             totalActiveTimeRef.current += deltaTime;
             lastFrameTimeRef.current = timestamp;
 
@@ -36,6 +40,7 @@ export function usePlayback(lessonMeta, tempoFactor, leadInSeconds) {
             const deltaScroll = deltaTime * currentSpeed;
             const newScrollOffset = scrollOffsetRef.current + deltaScroll;
             
+            // console.log('usePlayback: deltaScroll', deltaScroll, 'newOffset', newScrollOffset);
             scrollOffsetRef.current = newScrollOffset;
             setScrollOffset(newScrollOffset);
             animationFrameId.current = requestAnimationFrame(animate);
@@ -56,7 +61,7 @@ export function usePlayback(lessonMeta, tempoFactor, leadInSeconds) {
         scrollOffsetRef.current = newScrollOffset;
         setScrollOffset(newScrollOffset);
         totalActiveTimeRef.current = newTotalTime;
-        lastFrameTimeRef.current = 0;
+        lastFrameTimeRef.current = null;
         setPaused(true);
     };
 
