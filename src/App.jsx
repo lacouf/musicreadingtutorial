@@ -28,20 +28,22 @@ export default function App() {
     const stavesRef = useRef(null);
     const notesRef = useRef(null);
 
-    // Initialize off-screen canvases once
-    if (!stavesRef.current && typeof document !== 'undefined') {
-        stavesRef.current = document.createElement('canvas');
-    }
-    if (!notesRef.current && typeof document !== 'undefined') {
-        notesRef.current = document.createElement('canvas');
-    }
-
     // UI State
     const [showDevTools, setShowDevTools] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     
     const [renderTrigger, setRenderTrigger] = useState(0); 
     // playheadFlash, pulseActive, pulseColor, validatedNotesRef, recentMidiEventsRef removed from here
+
+    // Initialize off-screen canvases once
+    useEffect(() => {
+        if (typeof document !== 'undefined') {
+            if (!stavesRef.current) stavesRef.current = document.createElement('canvas');
+            if (!notesRef.current) notesRef.current = document.createElement('canvas');
+            // Trigger a re-render so the canvases are passed to children
+            setRenderTrigger(t => t + 1);
+        }
+    }, []);
 
     const playheadX = RENDERING.PLAYHEAD_X;
     const [viewportWidth, setViewportWidth] = useState(RENDERING.VIEWPORT_WIDTH);
@@ -108,6 +110,25 @@ export default function App() {
         { beatTolerance, validateNoteLength }
     );
 
+    const togglePause = () => {
+        // Toggle pause via engine, but also clear validation state if pausing
+        if (!paused) {
+            resetMidiState();
+        }
+        engineTogglePause();
+    };
+
+    const restart = () => {
+        const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
+        const currentSpeed = baseSpeed / tempoFactor;
+        const startOffset = -LEAD_IN_SECONDS * currentSpeed;
+        
+        resetPlayback(startOffset, -LEAD_IN_SECONDS);
+        
+        resetMidiState();
+        setLog(l => [...l, '🔄 Restarted']);
+    };
+
     // Effect: Reset playback when timeline changes
     useEffect(() => {
         const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
@@ -116,6 +137,19 @@ export default function App() {
         setLog(l => [...l, `Loaded ${mode} timeline`]); // Use setLog
     }, [timelineVersion]);
 
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                togglePause();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [togglePause]);
 
     const renderCurrentTimeline = () => {
         if (!stavesRef.current || !notesRef.current || !timelineRef.current) return;
@@ -139,126 +173,6 @@ export default function App() {
             .catch(e => setLog(l => [...l, 'Render error: ' + e.message]));
     };
 
-    // loadTimeline is now provided by useTimeline hook and reset logic is in useEffect[timelineVersion]
-
-    useEffect(() => {
-        stavesRef.current = document.createElement('canvas');
-        notesRef.current = document.createElement('canvas');
-
-        function findEventsInWindow(timeSec, windowSec = 0.45) {
-            const out = [];
-            for (let i = 0; i < timelineRef.current.length; i++) {
-                const ev = timelineRef.current[i];
-                const t = ev.start || 0;
-                const d = Math.abs(t - timeSec);
-                if (d <= windowSec) out.push({ ev, d, index: i });
-            }
-            out.sort((a, b) => a.d - b.d);
-            return out;
-        }
-
-        function cleanupValidatedNotes(currentTime) {
-            const expiryTime = 2000; 
-            for (const [index, timestamp] of validatedNotesRef.current.entries()) {
-                if (currentTime - timestamp > expiryTime) validatedNotesRef.current.delete(index);
-            }
-        }
-
-        const cleanupMidi = initializeMidi({
-            onNoteOn: (pitch, note) => {
-                const now = performance.now();
-                const lastEventTime = recentMidiEventsRef.current.get(note);
-                if (lastEventTime && (now - lastEventTime) < 50) return;
-                recentMidiEventsRef.current.set(note, now);
-                audioSynth.playNote(note);
-                setLog(l => [...l, `noteOn ${pitch} (${note})`]);
-                if (pausedRef.current) return;
-
-                const currentBeat = scrollOffsetRef.current / RENDERING.PIXELS_PER_BEAT;
-                const secPerBeat = TIMING.SECONDS_IN_MINUTE / lessonMeta.tempo;
-                const playTime = currentBeat * secPerBeat;
-                const windowSec = TIMING.WIDE_BEAT_TOLERANCE * secPerBeat;
-                const strictWindowSec = beatTolerance * secPerBeat;
-
-                cleanupValidatedNotes(now);
-                const allCandidates = findEventsInWindow(playTime, windowSec);
-                const revalidationWindow = 500; 
-                const candidates = allCandidates.filter(c => {
-                    const lastValidated = validatedNotesRef.current.get(c.index);
-                    return !lastValidated || (now - lastValidated) > revalidationWindow;
-                });
-
-                if (candidates.length === 0) {
-                    setLog(l => [...l, `❌ Extra/Misplaced: played ${note} at ${currentBeat.toFixed(2)}b`]);
-                    flashPlayhead('red');
-                    return;
-                }
-
-                const exact = candidates.find(c => Number.isInteger(c.ev.midi) && c.ev.midi === note && c.d <= strictWindowSec);
-                if (exact) {
-                    validatedNotesRef.current.set(exact.index, now);
-                    activeMatchesRef.current.set(note, { 
-                        index: exact.index, 
-                        startBeat: currentBeat, 
-                        durationBeats: exact.ev.durationBeats 
-                    });
-                    
-                    const key = exact.ev.vfKey || exact.ev.pitch || `midi:${exact.ev.midi}`;
-                    const diffBeats = exact.d / secPerBeat;
-                    setLog(l => [...l, `✅ Correct: ${key} (dt=${diffBeats.toFixed(2)} beats)`]);
-                    flashPlayhead('green');
-                } else {
-                    const nearest = candidates[0];
-                    const expectedKey = nearest.ev.vfKey || nearest.ev.pitch || `midi:${nearest.ev.midi}`;
-                    const diffBeats = nearest.d / secPerBeat;
-                    setLog(l => [...l, `❌ Wrong: played ${note}, expected ${expectedKey} (dt=${diffBeats.toFixed(2)} beats)`]);
-                    flashPlayhead('red');
-                }
-            },
-            onNoteOff: (pitch, note) => {
-                audioSynth.stopNote(note);
-                setLog(l => [...l, `noteOff ${pitch} (${note})`]);
-
-                if (pausedRef.current) return;
-
-                const match = activeMatchesRef.current.get(note);
-                if (match && validateNoteLength) {
-                    const currentBeat = scrollOffsetRef.current / RENDERING.PIXELS_PER_BEAT;
-                    const heldBeats = currentBeat - match.startBeat;
-                    const expected = match.durationBeats;
-                    
-                    // Tolerance for release: 0.2 beats or 20% of note length, whichever is larger
-                    const tolerance = Math.max(0.2, expected * 0.2);
-                    const diff = Math.abs(heldBeats - expected);
-
-                    if (diff <= tolerance) {
-                        setLog(l => [...l, `✨ Perfect Release! Held ${heldBeats.toFixed(2)}b (target ${expected}b)`]);
-                    } else if (heldBeats < expected) {
-                        setLog(l => [...l, `⚠️ Released Early: Held ${heldBeats.toFixed(2)}b (target ${expected}b)`]);
-                    } else {
-                        setLog(l => [...l, `⚠️ Held Too Long: Held ${heldBeats.toFixed(2)}b (target ${expected}b)`]);
-                    }
-                }
-                activeMatchesRef.current.delete(note);
-            },
-            onLog: (message) => setLog(l => [...l, message]),
-            onReady: (isReady) => setMidiSupported(isReady)
-        });
-
-        const handleKeyDown = (e) => {
-            if (e.code === 'Space') {
-                e.preventDefault();
-                togglePause();
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => {
-            cleanupMidi();
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [lessonMeta]); 
-
     useEffect(() => {
         const handleResize = (entries) => {
             for (let entry of entries) {
@@ -273,25 +187,6 @@ export default function App() {
 
     useEffect(() => { loadTimeline(); }, [mode, selectedLessonId, minNote, maxNote, includeSharps]);
     useEffect(() => { renderCurrentTimeline(); }, [viewportWidth, showValidTiming, lessonMeta, beatTolerance]);
-
-    const togglePause = () => {
-        // Toggle pause via engine, but also clear validation state if pausing
-        if (!paused) {
-            resetMidiState();
-        }
-        engineTogglePause();
-    };
-
-    const restart = () => {
-        const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
-        const currentSpeed = baseSpeed / tempoFactor;
-        const startOffset = -LEAD_IN_SECONDS * currentSpeed;
-        
-        resetPlayback(startOffset, -LEAD_IN_SECONDS);
-        
-        resetMidiState();
-        setLog(l => [...l, '🔄 Restarted']);
-    };
 
     const overlayWidth = 120;
     const circleSize = 18;
@@ -381,55 +276,65 @@ export default function App() {
                         )}
                     </div>
 
-                    {/* Score section */}
-                    <section className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border-[8px] border-white ring-1 ring-gray-200/50 transform transition-transform hover:scale-[1.002]">
-                        <div 
-                            ref={containerRef} 
-                            style={{ width: viewportWidth, maxWidth: '100%', height: viewportHeight, overflow: 'hidden', position: 'relative' }}
-                            className="bg-white"
-                        >
-                            <ScrollingCanvas
-                                stavesCanvas={stavesRef.current}
-                                notesCanvas={notesRef.current}
-                                viewportWidth={viewportWidth}
-                                viewportHeight={viewportHeight}
-                                scrollOffset={scrollOffset}
-                                playheadX={playheadX}
-                                playheadFlash={playheadFlash}
-                                renderTrigger={renderTrigger}
-                                clipX={clipX}
-                            />
-
-                            <div
-                                aria-hidden
-                                style={{
-                                    position: 'absolute',
-                                    left: Math.max(0, playheadX - overlayWidth / 2),
-                                    top: 0,
-                                    width: overlayWidth,
-                                    height: viewportHeight,
-                                    pointerEvents: 'none',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    zIndex: 10
-                                }}
+                    {/* Score section & Scoring Panel Split */}
+                    <div className="flex flex-col xl:flex-row gap-6 w-full">
+                        <section className="flex-[3] bg-white rounded-[3rem] shadow-2xl overflow-hidden border-[8px] border-white ring-1 ring-gray-200/50 transform transition-transform hover:scale-[1.002]">
+                            <div 
+                                ref={containerRef} 
+                                style={{ width: '100%', maxWidth: '100%', height: viewportHeight, overflow: 'hidden', position: 'relative' }}
+                                className="bg-white"
                             >
-                                <div
-                                    style={{
-                                        width: circleSize,
-                                        height: circleSize,
-                                        borderRadius: '50%',
-                                        background: pulseActive ? pulseColor : 'transparent',
-                                        transform: pulseActive ? 'scale(2.6)' : 'scale(1)',
-                                        opacity: pulseActive ? 0.85 : 0,
-                                        transition: 'transform 200ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease-out',
-                                        boxShadow: pulseActive ? `0 0 24px ${pulseColor}` : 'none'
-                                    }}
+                                <ScrollingCanvas
+                                    stavesCanvas={stavesRef.current}
+                                    notesCanvas={notesRef.current}
+                                    viewportWidth={viewportWidth}
+                                    viewportHeight={viewportHeight}
+                                    scrollOffset={scrollOffset}
+                                    playheadX={playheadX}
+                                    playheadFlash={playheadFlash}
+                                    renderTrigger={renderTrigger}
+                                    clipX={clipX}
                                 />
+
+                                <div
+                                    aria-hidden
+                                    style={{
+                                        position: 'absolute',
+                                        left: Math.max(0, playheadX - overlayWidth / 2),
+                                        top: 0,
+                                        width: overlayWidth,
+                                        height: viewportHeight,
+                                        pointerEvents: 'none',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        zIndex: 10
+                                    }}
+                                >
+                                    <div
+                                        style={{
+                                            width: circleSize,
+                                            height: circleSize,
+                                            borderRadius: '50%',
+                                            background: pulseActive ? pulseColor : 'transparent',
+                                            transform: pulseActive ? 'scale(2.6)' : 'scale(1)',
+                                            opacity: pulseActive ? 0.85 : 0,
+                                            transition: 'transform 200ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease-out',
+                                            boxShadow: pulseActive ? `0 0 24px ${pulseColor}` : 'none'
+                                        }}
+                                    />
+                                </div>
                             </div>
-                        </div>
-                    </section>
+                        </section>
+
+                        {/* Scoring System Panel */}
+                        <section className="flex-1 bg-white rounded-[3rem] shadow-2xl overflow-hidden border-[8px] border-white ring-1 ring-gray-200/50 min-h-[220px]">
+                            <div className="h-full flex flex-col items-center justify-center bg-gray-50/50 rounded-[2rem] border-2 border-dashed border-gray-100 m-2">
+                                <span className="text-4xl mb-3 filter drop-shadow-sm">🏆</span>
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Score System</span>
+                            </div>
+                        </section>
+                    </div>
 
                     {/* Hitbox Quick-Adjustment (Only in Dev Mode) */}
                     {showDevTools && (
