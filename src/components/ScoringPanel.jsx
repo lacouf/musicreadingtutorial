@@ -1,29 +1,38 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 
 /**
- * ScoringPanel component displays the current hits, misses, and accuracy.
- * 
+ * ScoringPanel component displays the current hits, wrong notes, misses, and accuracy.
+ *
+ * @param {Object} props
+ * @param {number} props.hits - The number of correct hits
+ * @param {number} props.wrongNotes - The number of wrong notes played
+ * @param {number} props.misses - The number of notes that scrolled past without attempt
  * @returns {JSX.Element} The rendered scoring panel.
  */
-const ScoringPanel = () => {
-  // Placeholders for hits, misses and accuracy as requested (logic to be implemented later)
-  const hits = 0;
-  const misses = 0;
-  const accuracy = 0;
+const ScoringPanel = ({ hits = 0, wrongNotes = 0, misses = 0 }) => {
+  const totalMisses = wrongNotes + misses;
+  const total = hits + totalMisses;
+  const accuracy = total > 0 ? Math.round((hits / total) * 100) : 0;
 
   return (
     <div className="h-full flex flex-col items-center justify-center bg-gray-50/50 rounded-[2rem] border-2 border-dashed border-gray-100 m-2 p-6">
       <span className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Performance</span>
-      
-      <div className="flex items-center gap-8 mb-4">
+
+      <div className="flex items-center gap-6 mb-4">
         <div className="flex flex-col items-center">
           <span className="text-4xl font-black text-green-500">{hits}</span>
           <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Hits</span>
         </div>
-        
+
+        <div className="flex flex-col items-center">
+          <span className="text-4xl font-black text-orange-500">{wrongNotes}</span>
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Wrong</span>
+        </div>
+
         <div className="flex flex-col items-center">
           <span className="text-4xl font-black text-red-500">{misses}</span>
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Misses</span>
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Missed</span>
         </div>
       </div>
 
@@ -33,6 +42,12 @@ const ScoringPanel = () => {
       </div>
     </div>
   );
+};
+
+ScoringPanel.propTypes = {
+  hits: PropTypes.number,
+  wrongNotes: PropTypes.number,
+  misses: PropTypes.number
 };
 
 export default ScoringPanel;

@@ -547,7 +547,386 @@ describe('useMidiSystem', () => {
       expect(result.current).toHaveProperty('playheadFlash');
       expect(result.current).toHaveProperty('pulseActive');
       expect(result.current).toHaveProperty('pulseColor');
+      expect(result.current).toHaveProperty('hits');
+      expect(result.current).toHaveProperty('wrongNotes');
+      expect(result.current).toHaveProperty('misses');
       expect(result.current).toHaveProperty('resetMidiState');
+    });
+  });
+
+  describe('Scoring System', () => {
+    describe('Initialization', () => {
+      it('should initialize scoring counters to zero', () => {
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        expect(result.current.hits).toBe(0);
+        expect(result.current.wrongNotes).toBe(0);
+        expect(result.current.misses).toBe(0);
+      });
+    });
+
+    describe('Hit Counting', () => {
+      it('should increment hits when correct note is played', () => {
+        vi.spyOn(validation, 'validateNoteOn').mockReturnValue({
+          result: 'correct',
+          message: '✅ Correct: C4 (dt=0.01 beats)',
+          color: 'green',
+          matchedIndex: 0,
+          matchData: { index: 0, startBeat: 0, durationBeats: 1 }
+        });
+
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        act(() => {
+          mockCallbacks.onNoteOn(60, 'C4');
+        });
+
+        expect(result.current.hits).toBe(1);
+        expect(result.current.wrongNotes).toBe(0);
+        expect(result.current.misses).toBe(0);
+      });
+
+      it('should increment hits for multiple correct notes', () => {
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        // Play three correct notes
+        vi.spyOn(validation, 'validateNoteOn')
+          .mockReturnValueOnce({
+            result: 'correct',
+            color: 'green',
+            matchedIndex: 0,
+            matchData: { index: 0, startBeat: 0, durationBeats: 1 }
+          })
+          .mockReturnValueOnce({
+            result: 'correct',
+            color: 'green',
+            matchedIndex: 1,
+            matchData: { index: 1, startBeat: 1, durationBeats: 1 }
+          })
+          .mockReturnValueOnce({
+            result: 'correct',
+            color: 'green',
+            matchedIndex: 2,
+            matchData: { index: 2, startBeat: 2, durationBeats: 1 }
+          });
+
+        act(() => {
+          global.advanceTime(60);
+          mockCallbacks.onNoteOn(60, 'C4');
+          global.advanceTime(60);
+          mockCallbacks.onNoteOn(62, 'D4');
+          global.advanceTime(60);
+          mockCallbacks.onNoteOn(64, 'E4');
+        });
+
+        expect(result.current.hits).toBe(3);
+      });
+    });
+
+    describe('Wrong Note Counting', () => {
+      it('should increment wrongNotes when wrong pitch is played', () => {
+        vi.spyOn(validation, 'validateNoteOn').mockReturnValue({
+          result: 'wrong',
+          message: '❌ Wrong: played 65, expected C4 (dt=0.05 beats)',
+          color: 'red',
+          nearestIndex: 0
+        });
+
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        act(() => {
+          mockCallbacks.onNoteOn(65, 'F4');
+        });
+
+        expect(result.current.hits).toBe(0);
+        expect(result.current.wrongNotes).toBe(1);
+        expect(result.current.misses).toBe(0);
+      });
+
+      it('should increment wrongNotes for extra notes', () => {
+        vi.spyOn(validation, 'validateNoteOn').mockReturnValue({
+          result: 'extra',
+          message: '❌ Extra/Misplaced: played 60 at 5.00b',
+          color: 'red'
+        });
+
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        mockScrollOffsetRef.current = 500; // 5 beats
+
+        act(() => {
+          mockCallbacks.onNoteOn(60, 'C4');
+        });
+
+        expect(result.current.hits).toBe(0);
+        expect(result.current.wrongNotes).toBe(1);
+        expect(result.current.misses).toBe(0);
+      });
+
+      it('should count multiple wrong notes', () => {
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        vi.spyOn(validation, 'validateNoteOn')
+          .mockReturnValueOnce({
+            result: 'wrong',
+            color: 'red',
+            nearestIndex: 0
+          })
+          .mockReturnValueOnce({
+            result: 'extra',
+            color: 'red'
+          });
+
+        act(() => {
+          global.advanceTime(60);
+          mockCallbacks.onNoteOn(65, 'F4'); // wrong note
+          global.advanceTime(60);
+          mockCallbacks.onNoteOn(70, 'A4'); // extra note
+        });
+
+        expect(result.current.wrongNotes).toBe(2);
+      });
+    });
+
+    describe('Passive Miss Watchdog', () => {
+      it('should mark notes as missed when they scroll past without being played', async () => {
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        // Move playhead far past the first note (beyond 5.5 beat threshold)
+        mockScrollOffsetRef.current = 650; // 6.5 beats (note at 0 beats + 5.5 buffer = 5.5)
+
+        // Wait for watchdog interval to run (200ms)
+        await act(async () => {
+          vi.advanceTimersByTime(200);
+        });
+
+        expect(result.current.misses).toBe(1);
+        expect(result.current.log.some(l => l.includes('❌ Missed'))).toBe(true);
+      });
+
+      it('should not mark notes as missed if they are within the tolerance buffer', async () => {
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        // Move playhead just past the note but within buffer (5.5 beats)
+        mockScrollOffsetRef.current = 500; // 5.0 beats (note at 0 + buffer 5.5 = still valid)
+
+        await act(async () => {
+          vi.advanceTimersByTime(200);
+        });
+
+        expect(result.current.misses).toBe(0);
+      });
+
+      it('should not mark attempted notes as missed', async () => {
+        vi.spyOn(validation, 'validateNoteOn').mockReturnValue({
+          result: 'correct',
+          color: 'green',
+          matchedIndex: 0,
+          matchData: { index: 0, startBeat: 0, durationBeats: 1 }
+        });
+
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        // Play the note
+        act(() => {
+          mockCallbacks.onNoteOn(60, 'C4');
+        });
+
+        // Move playhead past the note
+        mockScrollOffsetRef.current = 650; // 6.5 beats
+
+        // Wait for watchdog
+        await act(async () => {
+          vi.advanceTimersByTime(200);
+        });
+
+        expect(result.current.hits).toBe(1);
+        expect(result.current.misses).toBe(0);
+      });
+
+      it('should not mark wrong notes as missed', async () => {
+        vi.spyOn(validation, 'validateNoteOn').mockReturnValue({
+          result: 'wrong',
+          color: 'red',
+          nearestIndex: 0
+        });
+
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        // Play wrong note for index 0
+        act(() => {
+          mockCallbacks.onNoteOn(65, 'F4');
+        });
+
+        // Move playhead past the note
+        mockScrollOffsetRef.current = 650; // 6.5 beats
+
+        // Wait for watchdog
+        await act(async () => {
+          vi.advanceTimersByTime(200);
+        });
+
+        expect(result.current.wrongNotes).toBe(1);
+        expect(result.current.misses).toBe(0); // Should not also count as missed
+      });
+
+      it('should not run watchdog when paused', async () => {
+        mockPausedRef.current = true;
+
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        mockScrollOffsetRef.current = 650; // 6.5 beats
+
+        await act(async () => {
+          vi.advanceTimersByTime(200);
+        });
+
+        expect(result.current.misses).toBe(0);
+      });
+
+      it('should handle multiple missed notes', async () => {
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        // Move playhead past all notes
+        mockScrollOffsetRef.current = 950; // 9.5 beats (all 3 notes at 0, 1, 3 + 5.5 buffer)
+
+        // Wait for watchdog
+        await act(async () => {
+          vi.advanceTimersByTime(200);
+        });
+
+        expect(result.current.misses).toBe(3); // All 3 notes should be marked as missed
+      });
+    });
+
+    describe('Mixed Scenarios', () => {
+      it('should correctly count hits, wrong notes, and misses', async () => {
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        // Play first note correctly
+        vi.spyOn(validation, 'validateNoteOn').mockReturnValueOnce({
+          result: 'correct',
+          color: 'green',
+          matchedIndex: 0,
+          matchData: { index: 0, startBeat: 0, durationBeats: 1 }
+        });
+
+        act(() => {
+          global.advanceTime(60);
+          mockCallbacks.onNoteOn(60, 'C4');
+        });
+
+        // Play second note incorrectly
+        vi.spyOn(validation, 'validateNoteOn').mockReturnValueOnce({
+          result: 'wrong',
+          color: 'red',
+          nearestIndex: 1
+        });
+
+        act(() => {
+          global.advanceTime(60);
+          mockScrollOffsetRef.current = 100; // 1 beat
+          mockCallbacks.onNoteOn(65, 'F4');
+        });
+
+        // Skip third note (let it pass)
+        mockScrollOffsetRef.current = 950; // 9.5 beats
+
+        // Wait for watchdog to detect missed note
+        await act(async () => {
+          vi.advanceTimersByTime(200);
+        });
+
+        expect(result.current.hits).toBe(1);
+        expect(result.current.wrongNotes).toBe(1);
+        expect(result.current.misses).toBe(1); // Only index 2 should be missed
+      });
+    });
+
+    describe('Reset Functionality', () => {
+      it('should reset score when resetMidiState is called with default parameter', () => {
+        vi.spyOn(validation, 'validateNoteOn').mockReturnValue({
+          result: 'correct',
+          color: 'green',
+          matchedIndex: 0,
+          matchData: { index: 0, startBeat: 0, durationBeats: 1 }
+        });
+
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        // Build up some score
+        act(() => {
+          global.advanceTime(60);
+          mockCallbacks.onNoteOn(60, 'C4');
+        });
+
+        expect(result.current.hits).toBe(1);
+
+        // Reset with default parameter (should reset score)
+        act(() => {
+          result.current.resetMidiState();
+        });
+
+        expect(result.current.hits).toBe(0);
+        expect(result.current.wrongNotes).toBe(0);
+        expect(result.current.misses).toBe(0);
+      });
+
+      it('should preserve score when resetMidiState is called with false', () => {
+        vi.spyOn(validation, 'validateNoteOn').mockReturnValue({
+          result: 'correct',
+          color: 'green',
+          matchedIndex: 0,
+          matchData: { index: 0, startBeat: 0, durationBeats: 1 }
+        });
+
+        const { result } = renderHook(() =>
+          useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+        );
+
+        // Build up some score
+        act(() => {
+          global.advanceTime(60);
+          mockCallbacks.onNoteOn(60, 'C4');
+        });
+
+        expect(result.current.hits).toBe(1);
+
+        // Reset without resetting score
+        act(() => {
+          result.current.resetMidiState(false);
+        });
+
+        expect(result.current.hits).toBe(1); // Score should be preserved
+      });
     });
   });
 });

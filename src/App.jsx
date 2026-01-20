@@ -95,26 +95,29 @@ export default function App() {
     } = usePlayback(lessonMeta, tempoFactor, LEAD_IN_SECONDS);
 
     // Custom Hook: MIDI System
-    const { 
-        midiSupported, 
-        log, 
-        setLog, 
-        playheadFlash, 
-        pulseActive, 
+    const {
+        midiSupported,
+        log,
+        setLog,
+        playheadFlash,
+        pulseActive,
         pulseColor,
+        hits,
+        wrongNotes,
+        misses,
         resetMidiState
     } = useMidiSystem(
-        timelineRef, 
-        scrollOffsetRef, 
-        lessonMeta, 
-        pausedRef, 
+        timelineRef,
+        scrollOffsetRef,
+        lessonMeta,
+        pausedRef,
         { beatTolerance, validateNoteLength }
     );
 
     const togglePause = () => {
         // Toggle pause via engine, but also clear validation state if pausing
         if (!paused) {
-            resetMidiState();
+            resetMidiState(false); // Don't reset score, only clear validation state
         }
         engineTogglePause();
     };
@@ -330,7 +333,7 @@ export default function App() {
 
                         {/* Scoring System Panel */}
                         <section className="flex-1 bg-white rounded-[3rem] shadow-2xl overflow-hidden border-[8px] border-white ring-1 ring-gray-200/50 min-h-[220px]">
-                            <ScoringPanel />
+                            <ScoringPanel hits={hits} wrongNotes={wrongNotes} misses={misses} />
                         </section>
                     </div>
 

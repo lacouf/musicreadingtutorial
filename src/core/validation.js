@@ -84,7 +84,8 @@ export function validateNoteOn({
         return {
             result: 'wrong',
             message: `❌ Wrong: played ${note}, expected ${expectedKey} (dt=${diffBeats.toFixed(2)} beats)`,
-            color: 'red'
+            color: 'red',
+            nearestIndex: nearest.index
         };
     }
 }
