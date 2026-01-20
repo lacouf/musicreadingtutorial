@@ -11,6 +11,7 @@ import SettingsPanel from './components/SettingsPanel';
 import ControlPanel from './components/ControlPanel';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
+import ScoringPanel from './components/ScoringPanel';
 import { usePlayback } from './hooks/usePlayback';
 import { useTimeline } from './hooks/useTimeline';
 import { useMidiSystem } from './hooks/useMidiSystem';
@@ -329,10 +330,7 @@ export default function App() {
 
                         {/* Scoring System Panel */}
                         <section className="flex-1 bg-white rounded-[3rem] shadow-2xl overflow-hidden border-[8px] border-white ring-1 ring-gray-200/50 min-h-[220px]">
-                            <div className="h-full flex flex-col items-center justify-center bg-gray-50/50 rounded-[2rem] border-2 border-dashed border-gray-100 m-2">
-                                <span className="text-4xl mb-3 filter drop-shadow-sm">🏆</span>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Score System</span>
-                            </div>
+                            <ScoringPanel />
                         </section>
                     </div>
 
