@@ -1,4 +1,5 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import App from './App';
 import { describe, it, expect, vi } from 'vitest';
 import { TIMING } from './core/constants';
@@ -27,7 +28,11 @@ vi.mock('./audio/AudioSynth', () => ({
 describe('App Component', () => {
     it('renders without crashing', async () => {
         await act(async () => {
-            render(<App />);
+            render(
+                <MemoryRouter>
+                    <App />
+                </MemoryRouter>
+            );
         });
         expect(screen.getByText(/Piano/i)).toBeInTheDocument();
         // Use a more specific selector or check for the heading
@@ -42,7 +47,11 @@ describe('App Component', () => {
 
     it('initializes with correct default values', async () => {
         await act(async () => {
-            render(<App />);
+            render(
+                <MemoryRouter>
+                    <App />
+                </MemoryRouter>
+            );
         });
         expect(screen.getByText(/lesson/i)).toBeInTheDocument();
         expect(screen.getByDisplayValue('C4')).toBeInTheDocument();

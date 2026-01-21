@@ -1,10 +1,10 @@
 // javascript
 // File: `src/App.jsx`
 import React, { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ScrollingCanvas from './components/ScrollingCanvas';
 import { renderScoreToCanvases } from './components/ScoreRenderer';
-import { initializeMidi } from './midi/MidiInput';
-import { exampleJSONLesson, exampleMusicXML, parseTimeline, AVAILABLE_LESSONS } from './parser/TimeLineParser';
+import { exampleJSONLesson, exampleMusicXML, AVAILABLE_LESSONS } from './parser/TimeLineParser';
 import LogDisplay from './components/LogDisplay';
 import LessonDisplay from './components/LessonDisplay';
 import SettingsPanel from './components/SettingsPanel';
@@ -15,9 +15,7 @@ import ScoringPanel from './components/ScoringPanel';
 import { usePlayback } from './hooks/usePlayback';
 import { useTimeline } from './hooks/useTimeline';
 import { useMidiSystem } from './hooks/useMidiSystem';
-import { audioSynth } from './audio/AudioSynth'; // Still needed for volume slider in ControlPanel
-import { parsePitchToMidi, midiToVexKey } from './core/musicUtils';
-import { generateRandomTimeline } from './core/NoteGenerator';
+import { parsePitchToMidi } from './core/musicUtils';
 import { RENDERING, TIMING, MIDI } from './core/constants';
 import { calculateScrollSpeed } from './core/layoutUtils';
 
@@ -29,12 +27,31 @@ export default function App() {
     const stavesRef = useRef(null);
     const notesRef = useRef(null);
 
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    // Derive mode and selectedLessonId from URL
+    const mode = location.pathname.startsWith('/lesson') ? 'lesson' : 'practice';
+    const lessonMatch = location.pathname.match(/\/lesson\/([^/]+)/);
+    const selectedLessonId = lessonMatch ? lessonMatch[1] : AVAILABLE_LESSONS[0].id;
+
+    const setMode = (m) => {
+        if (m === 'practice') {
+            navigate('/practice');
+        } else {
+            navigate(`/lesson/${selectedLessonId}`);
+        }
+    };
+
+    const setSelectedLessonId = (id) => {
+        navigate(`/lesson/${id}`);
+    };
+
     // UI State
     const [showDevTools, setShowDevTools] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     
     const [renderTrigger, setRenderTrigger] = useState(0); 
-    // playheadFlash, pulseActive, pulseColor, validatedNotesRef, recentMidiEventsRef removed from here
 
     // Initialize off-screen canvases once
     useEffect(() => {
@@ -66,11 +83,6 @@ export default function App() {
         sixteenth: false
     });
 
-    const [mode, setMode] = useState('practice'); 
-    const [selectedLessonId, setSelectedLessonId] = useState(AVAILABLE_LESSONS[0].id);
-
-    // activeMatchesRef removed
-
     // Custom Hook: Timeline Manager
     const { 
         timelineRef, 
@@ -90,8 +102,7 @@ export default function App() {
         paused, 
         pausedRef, 
         togglePause: engineTogglePause, 
-        resetPlayback,
-        setPaused
+        resetPlayback
     } = usePlayback(lessonMeta, tempoFactor, LEAD_IN_SECONDS);
 
     // Custom Hook: MIDI System
