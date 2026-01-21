@@ -76,7 +76,7 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         notesCtx.strokeStyle = "#000";
         notesCtx.beginPath();
         notesCtx.moveTo(barX, trebleY);
-        notesCtx.lineTo(barX, bassY + 80);
+        notesCtx.lineTo(barX, bassY + 100); // Connect to bottom of bass stave
         notesCtx.stroke();
     }
 
