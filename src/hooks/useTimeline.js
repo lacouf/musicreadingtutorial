@@ -89,12 +89,31 @@ export function useTimeline(mode, selectedLessonId, settings, onTimelineLoaded) 
             
             let midi = (typeof pitchSource === 'number' && Number.isFinite(pitchSource)) ? Math.trunc(pitchSource) : parsePitchToMidi(String(pitchSource || ''));
             
-            // If we have an original pitch string from the parser (like 'Bb4'), keep it!
-            // Only generate a new vfKey/canonicalPitch if we don't have one.
-            const vfKey = originalPitch ? originalPitch.replace(/([A-G][#b]?)(-?\d+)/, '$1/$2').toLowerCase() : (midi ? midiToVexKey(midi) : null);
-            const canonicalPitch = originalPitch || (midi ? midiToPitch(midi) : null);
+            // If the parser already gave us a clean pitch string like "C3" or "Bb4", use it.
+            // VexFlow keys are usually "step/octave" (e.g. "c/3").
+            let vfKey = ev.vfKey || null;
+            if (!vfKey && originalPitch && typeof originalPitch === 'string') {
+                if (originalPitch.includes('/')) {
+                    vfKey = originalPitch.toLowerCase();
+                } else {
+                    // Convert "Bb4" to "bb/4"
+                    vfKey = originalPitch.replace(/([A-G][#b]*)(-?\d+)/i, (match, p1, p2) => `${p1.toLowerCase()}/${p2}`);
+                }
+            }
+            
+            if (!vfKey && midi !== null) {
+                vfKey = midiToVexKey(midi);
+            }
 
-            return { ...ev, midi: midi ?? null, vfKey: vfKey ?? null, pitch: canonicalPitch, key: canonicalPitch };
+            const canonicalPitch = originalPitch || (midi !== null ? midiToPitch(midi) : null);
+
+            return { 
+                ...ev, 
+                midi: midi ?? null, 
+                vfKey: vfKey, 
+                pitch: canonicalPitch, 
+                key: canonicalPitch 
+            };
         });
 
         timelineRef.current = normalizedTimeline;

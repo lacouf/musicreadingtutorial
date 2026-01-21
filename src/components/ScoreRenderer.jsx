@@ -115,7 +115,7 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         const vexX = logicX - RENDERING.VEXFLOW_INTRINSIC_OFFSET;
 
         // Helper to create and collect a chord (or single note)
-        const createChord = (items, stave, staveY, targetArray, measureGroup) => {
+        const createChord = (items, stave, staveY, targetArray, measureGroup, clefName) => {
             if (items.length === 0) return;
             
             const vData = beatsToVexDuration(items[0].durationBeats || 1);
@@ -126,7 +126,8 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
 
             items.forEach((ev, index) => {
                 const raw = (ev.pitch || ev.key || '').toString().trim();
-                const m = raw.match(/^([A-Ga-g])([#b]?)\/?(-?\d+)$/);
+                // Support multiple accidentals (e.g. bb, ##)
+                const m = raw.match(/^([A-Ga-g])([#b]*)\/?(-?\d+)$/);
                 if (m) {
                     const step = m[1].toLowerCase();
                     const acc = m[2];
@@ -140,7 +141,7 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
 
             if (keys.length === 0) return;
 
-            const note = new StaveNote({ keys, duration });
+            const note = new StaveNote({ keys, duration, clef: clefName });
             if (dots > 0) note.addModifier(new Dot(), 0);
 
             modifiers.forEach(mod => {
@@ -168,9 +169,9 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
 
         const measureGroup = getMeasureGroup(measureIndex);
         if (staffId === 1) {
-            createChord(group, notesTrebleStave, trebleY, measureGroup.treble, measureGroup);
+            createChord(group, notesTrebleStave, trebleY, measureGroup.treble, measureGroup, 'treble');
         } else {
-            createChord(group, notesBassStave, bassY, measureGroup.bass, measureGroup);
+            createChord(group, notesBassStave, bassY, measureGroup.bass, measureGroup, 'bass');
         }
     }
 
