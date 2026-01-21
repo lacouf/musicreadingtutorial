@@ -10,27 +10,57 @@ export function useTimeline(mode, selectedLessonId, settings, onTimelineLoaded) 
     const timelineRef = useRef([]);
     const [lessonMeta, setLessonMeta] = useState({ tempo: DEFAULT_TEMPO, beatsPerMeasure: 4 });
     const [timelineVersion, setTimelineVersion] = useState(0);
+    const [lessonContent, setLessonContent] = useState(null);
     
     // We use a ref for the callback to avoid dependency loops if the user passes an unstable function
     const onLoadedRef = useRef(onTimelineLoaded);
     useEffect(() => { onLoadedRef.current = onTimelineLoaded; }, [onTimelineLoaded]);
 
-    const loadTimeline = useCallback(() => {
+    const loadTimeline = useCallback(async () => {
         let rawTimeline;
         let newMeta = { tempo: DEFAULT_TEMPO, beatsPerMeasure: 4 };
 
         if (mode === 'lesson') {
-            const useJson = true; 
             const lesson = AVAILABLE_LESSONS.find(l => l.id === selectedLessonId) || AVAILABLE_LESSONS[0];
-            const lessonData = useJson ? lesson.data : lesson.xml;
+            let lessonData = lesson.data;
+            let format = 'json';
+
+            if (lesson.file) {
+                try {
+                    const response = await fetch(lesson.file);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    
+                    lessonData = await response.text();
+                    
+                    // Debug: check if we got HTML instead of XML
+                    if (lessonData.trim().startsWith('<!DOCTYPE html') || lessonData.trim().startsWith('<html')) {
+                        console.error('FETCH ERROR: Received HTML instead of XML. This usually means a 404 occurred and the server returned index.html.');
+                        return;
+                    }
+
+                    format = 'musicxml';
+                } catch (error) {
+                    console.error('Failed to load lesson file:', error);
+                    return;
+                }
+            } else if (lesson.xml) {
+                lessonData = lesson.xml;
+                format = 'musicxml';
+            }
+
+            setLessonContent(lessonData);
+            const useJson = format === 'json';
+            
+            const parsed = parseTimeline(format, lessonData, DEFAULT_TEMPO);
+            rawTimeline = parsed.timeline;
             
             newMeta = { 
-                tempo: lessonData.tempo || DEFAULT_TEMPO, 
-                beatsPerMeasure: lessonData.timeSignature?.numerator || 4 
+                tempo: useJson ? (lessonData.tempo || DEFAULT_TEMPO) : DEFAULT_TEMPO, 
+                beatsPerMeasure: parsed.metadata.beatsPerMeasure,
+                beatType: parsed.metadata.beatType
             };
-            
-            rawTimeline = parseTimeline(useJson ? 'json' : 'musicxml', lessonData, newMeta.tempo);
         } else {
+            setLessonContent(null);
             newMeta = { tempo: DEFAULT_TEMPO, beatsPerMeasure: 4 };
             
             const { enabledDurations, minNote, maxNote, includeSharps } = settings;
@@ -47,6 +77,11 @@ export function useTimeline(mode, selectedLessonId, settings, onTimelineLoaded) 
         }
 
         setLessonMeta(newMeta);
+
+        if (!rawTimeline) {
+            console.error('No timeline data available!');
+            return;
+        }
 
         const normalizedTimeline = rawTimeline.map(ev => {
             const pitchSource = ev.midi ?? ev.pitch ?? ev.key ?? ev.note ?? ev.name ?? ev.vfKey ?? (Array.isArray(ev.keys) ? ev.keys[0] : '') ;
@@ -69,6 +104,7 @@ export function useTimeline(mode, selectedLessonId, settings, onTimelineLoaded) 
         timelineRef,
         lessonMeta,
         timelineVersion,
+        lessonContent,
         loadTimeline
     };
 }

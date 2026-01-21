@@ -160,13 +160,26 @@ export const rhythmMixLessonXML = `<?xml version="1.0" encoding="UTF-8"?>
 
 export const AVAILABLE_LESSONS = [
     { id: 'polyphonic', name: 'Polyphonic Chords', data: exampleJSONLesson, xml: exampleMusicXML },
-    { id: 'rhythm', name: 'Rhythm & Beaming', data: rhythmMixLessonJSON, xml: rhythmMixLessonXML }
+    { id: 'rhythm', name: 'Rhythm & Beaming', data: rhythmMixLessonJSON, xml: rhythmMixLessonXML },
+    { id: 'nocturne', name: 'Chopin - Nocturne No. 1', file: '/Nocturne.xml' }
 ];
 
 export function simpleMusicXMLtoTimeline(xmlString, tempo = 60) {
+    if (!xmlString) {
+        console.error('simpleMusicXMLtoTimeline: xmlString is empty');
+        return { timeline: [], metadata: { beatsPerMeasure: 4, beatType: 4 } };
+    }
+
     const parser = new DOMParser();
     const doc = parser.parseFromString(xmlString, 'application/xml');
     
+    // Check for parsing errors
+    const parserError = doc.getElementsByTagName('parsererror');
+    if (parserError.length > 0) {
+        console.error('MusicXML Parsing Error:', parserError[0].textContent);
+        return { timeline: [], metadata: { beatsPerMeasure: 4, beatType: 4 } };
+    }
+
     let divisions = 1;
     let beatsPerMeasure = 4;
     let beatType = 4;
@@ -174,109 +187,167 @@ export function simpleMusicXMLtoTimeline(xmlString, tempo = 60) {
     
     const secPerBeat = TIMING.SECONDS_IN_MINUTE / tempo;
 
-    const parts = doc.querySelectorAll('part');
-    parts.forEach(part => {
+    // Use getElementsByTagName for better compatibility with different DOM implementations
+    const parts = doc.getElementsByTagName('part');
+
+    for (let p = 0; p < parts.length; p++) {
+        const part = parts[p];
         let cumulativeBeats = 0;
-        const measures = part.querySelectorAll('measure');
+        const measures = part.getElementsByTagName('measure');
         
-        measures.forEach(measure => {
+        for (let m = 0; m < measures.length; m++) {
+            const measure = measures[m];
             const measureNumber = parseInt(measure.getAttribute('number') || '1', 10);
             
-            const attr = measure.querySelector('attributes');
-            if (attr) {
-                const div = attr.querySelector('divisions');
-                if (div) divisions = parseInt(div.textContent, 10);
+            // Attributes can contain divisions and time signature
+            const attributesList = measure.getElementsByTagName('attributes');
+            if (attributesList.length > 0) {
+                const attr = attributesList[0];
+                const divisionsList = attr.getElementsByTagName('divisions');
+                if (divisionsList.length > 0) divisions = parseInt(divisionsList[0].textContent, 10);
                 
-                const time = attr.querySelector('time');
-                if (time) {
-                    beatsPerMeasure = parseInt(time.querySelector('beats')?.textContent || '4', 10);
-                    beatType = parseInt(time.querySelector('beat-type')?.textContent || '4', 10);
+                const timeList = attr.getElementsByTagName('time');
+                if (timeList.length > 0) {
+                    const time = timeList[0];
+                    const beatsList = time.getElementsByTagName('beats');
+                    const beatTypeList = time.getElementsByTagName('beat-type');
+                    if (beatsList.length > 0) beatsPerMeasure = parseInt(beatsList[0].textContent, 10);
+                    if (beatTypeList.length > 0) beatType = parseInt(beatTypeList[0].textContent, 10);
                 }
             }
 
-            let measureBeatOffset = 0;
-            const notes = measure.querySelectorAll('note');
-            
-            notes.forEach(note => {
-                const isRest = note.querySelector('rest');
-                const isChord = note.querySelector('chord');
-                const duration = parseInt(note.querySelector('duration')?.textContent || '0', 10);
-                const durationBeats = duration / divisions;
+            let currentMeasureCursor = 0;
+            let lastNoteStart = 0;
 
-                if (isChord) {
-                    // Chord note starts at the same time as the previous note
-                    // So we don't advance measureBeatOffset, and we use the previous note's start time
+            // Iterate through child nodes to handle backups/forwards
+            const children = measure.children;
+            for (let i = 0; i < children.length; i++) {
+                const node = children[i];
+                const nodeName = node.nodeName.toLowerCase();
+
+                if (nodeName === 'note') {
+                    const isRest = node.getElementsByTagName('rest').length > 0;
+                    const isChord = node.getElementsByTagName('chord').length > 0;
+                    
+                    const durationEl = node.getElementsByTagName('duration');
+                    const duration = durationEl.length > 0 ? parseInt(durationEl[0].textContent || '0', 10) : 0;
+                    
+                    const voiceEl = node.getElementsByTagName('voice');
+                    const voice = voiceEl.length > 0 ? voiceEl[0].textContent : '1';
+                    
+                    const staffEl = node.getElementsByTagName('staff');
+                    const staff = staffEl.length > 0 ? staffEl[0].textContent : '1';
+
+                    let noteStartInDivisions;
+                    if (isChord) {
+                        noteStartInDivisions = lastNoteStart;
+                    } else {
+                        noteStartInDivisions = currentMeasureCursor;
+                        lastNoteStart = currentMeasureCursor;
+                        currentMeasureCursor += duration;
+                    }
+
+                    if (!isRest) {
+                        const stepEl = node.getElementsByTagName('step');
+                        const octaveEl = node.getElementsByTagName('octave');
+                        
+                        const step = stepEl.length > 0 ? stepEl[0].textContent : 'C';
+                        const octave = octaveEl.length > 0 ? octaveEl[0].textContent : '4';
+                        
+                        const alterEl = node.getElementsByTagName('alter');
+                        const alter = alterEl.length > 0 ? alterEl[0].textContent : null;
+                        
+                        let stepName = step;
+                        if (alter) {
+                            const alterVal = parseInt(alter, 10);
+                            if (alterVal === 1) stepName += '#';
+                            else if (alterVal === -1) stepName += 'b';
+                            else if (alterVal === 2) stepName += '##';
+                            else if (alterVal === -2) stepName += 'bb';
+                        }
+                        
+                        const pitch = `${stepName}${octave}`;
+                        const midi = parsePitchToMidi(pitch);
+
+                        const startBeatInMeasure = noteStartInDivisions / divisions;
+                        const absoluteBeat = cumulativeBeats + startBeatInMeasure;
+                        const timeSec = absoluteBeat * secPerBeat;
+                        const durationBeats = duration / divisions;
+
+                        const timeModList = node.getElementsByTagName('time-modification');
+                        let tupletInfo = null;
+                        if (timeModList.length > 0) {
+                            const timeMod = timeModList[0];
+                            tupletInfo = {
+                                actual: parseInt(timeMod.getElementsByTagName('actual-notes')[0]?.textContent || '1', 10),
+                                normal: parseInt(timeMod.getElementsByTagName('normal-notes')[0]?.textContent || '1', 10)
+                            };
+                        }
+
+                        timeline.push({
+                            measure: measureNumber,
+                            beat: Math.floor(startBeatInMeasure) + 1,
+                            beatFraction: startBeatInMeasure % 1,
+                            durationBeats: durationBeats,
+                            timeSec: timeSec,
+                            start: timeSec,
+                            dur: durationBeats * secPerBeat,
+                            pitch: pitch,
+                            midi: midi,
+                            voice: voice,
+                            staff: parseInt(staff, 10),
+                            tuplet: tupletInfo
+                        });
+                    }
+                } else if (nodeName === 'backup') {
+                    const durationEl = node.getElementsByTagName('duration');
+                    const duration = durationEl.length > 0 ? parseInt(durationEl[0].textContent || '0', 10) : 0;
+                    currentMeasureCursor -= duration;
+                } else if (nodeName === 'forward') {
+                    const durationEl = node.getElementsByTagName('duration');
+                    const duration = durationEl.length > 0 ? parseInt(durationEl[0].textContent || '0', 10) : 0;
+                    currentMeasureCursor += duration;
                 }
+            }
 
-                // If it was a chord, we need to know the start beat of the previous note
-                const startBeatInMeasure = isChord && timeline.length > 0 
-                    ? timeline[timeline.length - 1].beat + timeline[timeline.length - 1].beatFraction - 1
-                    : measureBeatOffset;
-
-                const absoluteBeat = cumulativeBeats + startBeatInMeasure;
-                const timeSec = absoluteBeat * secPerBeat;
-
-                if (!isRest) {
-                    const step = note.querySelector('pitch > step')?.textContent || 'C';
-                    const alter = note.querySelector('pitch > alter')?.textContent || null;
-                    const octave = note.querySelector('pitch > octave')?.textContent || '4';
-                    const stepName = alter ? (parseInt(alter) > 0 ? `${step}#` : `${step}b`) : step;
-                    const pitch = `${stepName}${octave}`;
-                    const midi = parsePitchToMidi(pitch);
-
-                    timeline.push({
-                        measure: measureNumber,
-                        beat: Math.floor(startBeatInMeasure) + 1,
-                        beatFraction: startBeatInMeasure % 1,
-                        durationBeats: durationBeats,
-                        timeSec: timeSec,
-                        start: timeSec, // Backward compatibility
-                        dur: durationBeats * secPerBeat, // Backward compatibility
-                        pitch: pitch,
-                        midi: midi
-                    });
-                }
-
-                if (!isChord) {
-                    measureBeatOffset += durationBeats;
-                }
-            });
             cumulativeBeats += beatsPerMeasure;
-        });
-    });
+        }
+    }
 
-    return timeline;
+    timeline.sort((a, b) => (a.start - b.start) || (a.midi - b.midi));
+
+    return {
+        timeline,
+        metadata: {
+            beatsPerMeasure,
+            beatType
+        }
+    };
 }
 
 export function parseTimeline(lessonType, lessonData, tempo) {
     if (lessonType === 'json') {
         const secPerBeat = TIMING.SECONDS_IN_MINUTE / tempo;
         const beatsPerMeasure = lessonData.timeSignature?.numerator || 4;
+        const beatType = lessonData.timeSignature?.denominator || 4;
 
-        return lessonData.notes.map(n => {
+        const timeline = lessonData.notes.map(n => {
             const midi = n.midi ?? parsePitchToMidi(n.pitch || '');
-            
-            // Calculate missing musical timing fields if needed
             let measure = n.measure;
             let beat = n.beat;
             let beatFraction = n.beatFraction;
             let durationBeats = n.durationBeats;
-
             let timeSec = n.timeSec ?? n.start;
 
             if (measure === undefined || beat === undefined) {
-                // Infer from start time (seconds)
                 const startSec = n.start ?? 0;
                 const totalBeats = startSec / secPerBeat;
-                
                 measure = Math.floor(totalBeats / beatsPerMeasure) + 1;
                 const beatInMeasure = totalBeats % beatsPerMeasure;
                 beat = Math.floor(beatInMeasure) + 1;
                 beatFraction = beatInMeasure % 1;
-                
                 if (timeSec === undefined) timeSec = startSec;
             } else if (timeSec === undefined) {
-                // Infer start time from measure/beat
                 const totalBeats = (measure - 1) * beatsPerMeasure + (beat - 1) + (beatFraction || 0);
                 timeSec = totalBeats * secPerBeat;
             }
@@ -286,9 +357,9 @@ export function parseTimeline(lessonType, lessonData, tempo) {
                 durationBeats = durSec / secPerBeat;
             }
 
-            const result = {
+            return {
                 ...n,
-                midi: midi,
+                midi,
                 start: timeSec ?? 0,
                 timeSec: timeSec ?? 0,
                 measure,
@@ -296,11 +367,17 @@ export function parseTimeline(lessonType, lessonData, tempo) {
                 beatFraction,
                 durationBeats
             };
-            // console.log('Parsed Note:', result);
-            return result;
         });
+
+        return {
+            timeline,
+            metadata: {
+                beatsPerMeasure,
+                beatType
+            }
+        };
     } else if (lessonType === 'musicxml') {
         return simpleMusicXMLtoTimeline(lessonData, tempo);
     }
-    return [];
+    return { timeline: [], metadata: { beatsPerMeasure: 4, beatType: 4 } };
 }

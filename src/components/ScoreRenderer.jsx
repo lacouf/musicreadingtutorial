@@ -1,4 +1,4 @@
-import { Renderer, Stave, StaveNote, TickContext, Dot, Accidental, Beam } from 'vexflow';
+import { Renderer, Stave, StaveNote, TickContext, Dot, Accidental, Beam, Tuplet } from 'vexflow';
 import { parsePitchToMidi, STRICT_WINDOW_SECONDS } from '../core/musicUtils';
 import { RENDERING, MIDI, COLORS, TIMING } from '../core/constants';
 import { beatsToVexDuration } from '../core/durationConverter';
@@ -29,16 +29,19 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
     const trebleY = RENDERING.TREBLE_Y;
     const bassY = RENDERING.BASS_Y;
 
-    const trebleStave = new Stave(marginLeft, trebleY, staveWidth).addClef("treble").addTimeSignature("4/4");
+    const beatsPerMeasure = opts.beatsPerMeasure || 4;
+    const beatType = opts.beatType || 4;
+    const timeSig = `${beatsPerMeasure}/${beatType}`;
+
+    const trebleStave = new Stave(marginLeft, trebleY, staveWidth).addClef("treble").addTimeSignature(timeSig);
     trebleStave.setContext(stavesCtx).draw();
-    const bassStave = new Stave(marginLeft, bassY, staveWidth).addClef("bass").addTimeSignature("4/4");
+    const bassStave = new Stave(marginLeft, bassY, staveWidth).addClef("bass").addTimeSignature(timeSig);
     bassStave.setContext(stavesCtx).draw();
 
     // Calculate where the notes should start (after clef/time sig) to define clipping region
     const notesStartX = trebleStave.getNoteStartX();
 
     const tempo = opts.tempo || 60; 
-    const beatsPerMeasure = opts.beatsPerMeasure || 4;
     const secPerBeat = TIMING.SECONDS_IN_MINUTE / tempo;
 
     const filteredTimeline = timeline.filter(ev => {
@@ -77,17 +80,19 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         notesCtx.stroke();
     }
 
-    // Group events by start time to form chords
+    // Group events by (start time + staff) to form chords per staff
     const groupedEvents = new Map();
     for (const ev of filteredTimeline) {
-        const timeKey = `${ev.measure}-${ev.beat}-${ev.beatFraction}`;
+        // Staff is 1 (Treble) or 2 (Bass) usually. Default to 1 if missing.
+        const staffId = ev.staff || (ev.midi >= MIDI.C4_MIDI ? 1 : 2);
+        const timeKey = `${ev.measure}-${ev.beat}-${ev.beatFraction}-S${staffId}`;
+        
         if (!groupedEvents.has(timeKey)) {
             groupedEvents.set(timeKey, []);
         }
         groupedEvents.get(timeKey).push(ev);
     }
 
-    // Store notes grouped by measure for beaming
     // Map<measureIndex, { treble: StaveNote[], bass: StaveNote[] }>
     const notesByMeasure = new Map();
 
@@ -98,32 +103,23 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         return notesByMeasure.get(m);
     };
 
-    // Process each group (chord)
+    // Process each group (chord per staff)
     for (const [key, group] of groupedEvents) {
         if (group.length === 0) continue;
 
-        // Representative event for positioning
         const leadEv = group[0];
         const measureIndex = leadEv.measure || 1;
-        
-        // Split into treble and bass notes
-        const trebleNotes = [];
-        const bassNotes = [];
-
-        for (const ev of group) {
-            const midi = Number.isInteger(ev.midi) ? ev.midi : parsePitchToMidi(ev.pitch || ev.key || '');
-            if (midi >= MIDI.C4_MIDI) trebleNotes.push(ev);
-            else bassNotes.push(ev);
-        }
+        const staffId = leadEv.staff || (leadEv.midi >= MIDI.C4_MIDI ? 1 : 2);
 
         const logicX = calculateNoteX(leadEv.measure || 1, leadEv.beat || 1, leadEv.beatFraction || 0, pixelsPerBeat, marginLeft, beatsPerMeasure) + initialLeadPixels;
         const vexX = logicX - RENDERING.VEXFLOW_INTRINSIC_OFFSET;
 
         // Helper to create and collect a chord (or single note)
-        const createChord = (items, stave, staveY, targetArray) => {
+        const createChord = (items, stave, staveY, targetArray, measureGroup) => {
             if (items.length === 0) return;
             
-            const { duration, dots } = beatsToVexDuration(items[0].durationBeats || 1);
+            const vData = beatsToVexDuration(items[0].durationBeats || 1);
+            const { duration, dots } = vData;
             
             const keys = [];
             const modifiers = [];
@@ -148,30 +144,34 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
             if (dots > 0) note.addModifier(new Dot(), 0);
 
             modifiers.forEach(mod => {
-                note.addModifier(new Accidental(mod.type), mod.index);
+                let vexAcc;
+                if (mod.type === '#') vexAcc = '#';
+                else if (mod.type === 'b') vexAcc = 'b';
+                else if (mod.type === '##') vexAcc = '##';
+                else if (mod.type === 'bb') vexAcc = 'bb';
+                else if (mod.type === 'n') vexAcc = 'n';
+                
+                if (vexAcc) note.addModifier(new Accidental(vexAcc), mod.index);
             });
 
-            // Draw validation window immediately (independent of VexFlow rendering)
+            // Draw validation window immediately
             if (showValidTiming) {
                 notesCtx.fillStyle = COLORS.VALIDATION_GREEN;
                 notesCtx.fillRect(logicX - windowPixels, staveY, windowPixels * 2, RENDERING.VALIDATION_WINDOW_HEIGHT);
-                notesCtx.fillStyle = COLORS.GREEN;
-                notesCtx.fillRect(logicX - windowPixels, staveY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
-                notesCtx.fillRect(logicX + windowPixels, staveY, RENDERING.VALIDATION_WINDOW_LINE_WIDTH, RENDERING.VALIDATION_WINDOW_HEIGHT);
             }
 
-            // Position note
             const tc = new TickContext();
             tc.addTickable(note).preFormat().setX(vexX);
             note.setContext(notesCtx).setStave(stave);
-            
-            // Collect for beaming and later drawing
             targetArray.push(note);
         };
 
         const measureGroup = getMeasureGroup(measureIndex);
-        createChord(trebleNotes, notesTrebleStave, trebleY, measureGroup.treble);
-        createChord(bassNotes, notesBassStave, bassY, measureGroup.bass);
+        if (staffId === 1) {
+            createChord(group, notesTrebleStave, trebleY, measureGroup.treble, measureGroup);
+        } else {
+            createChord(group, notesBassStave, bassY, measureGroup.bass, measureGroup);
+        }
     }
 
     // Generate beams and draw everything

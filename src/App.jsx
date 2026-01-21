@@ -83,16 +83,25 @@ export default function App() {
         sixteenth: false
     });
 
+    // Memoize settings to prevent redundant re-fetching
+    const timelineSettings = React.useMemo(() => ({
+        minNote, 
+        maxNote, 
+        includeSharps, 
+        enabledDurations
+    }), [minNote, maxNote, includeSharps, enabledDurations]);
+
     // Custom Hook: Timeline Manager
     const { 
         timelineRef, 
         lessonMeta, 
         timelineVersion, 
+        lessonContent,
         loadTimeline 
     } = useTimeline(
         mode, 
         selectedLessonId, 
-        { minNote, maxNote, includeSharps, enabledDurations }
+        timelineSettings
     );
 
     // Custom Hook: Playback Engine
@@ -168,8 +177,10 @@ export default function App() {
 
     const renderCurrentTimeline = () => {
         if (!stavesRef.current || !notesRef.current || !timelineRef.current) return;
-        const minMidi = parsePitchToMidi(minNote) ?? MIDI.MIN_MIDI;
-        const maxMidi = parsePitchToMidi(maxNote) ?? MIDI.MAX_MIDI;
+        
+        // In lesson mode, we show the full range. In practice mode, we use the filters.
+        const minMidi = mode === 'lesson' ? MIDI.MIN_MIDI : (parsePitchToMidi(minNote) ?? MIDI.MIN_MIDI);
+        const maxMidi = mode === 'lesson' ? MIDI.MAX_MIDI : (parsePitchToMidi(maxNote) ?? MIDI.MAX_MIDI);
 
         renderScoreToCanvases(stavesRef.current, notesRef.current, timelineRef.current, { 
             viewportWidth, viewportHeight, 
@@ -177,6 +188,7 @@ export default function App() {
             playheadX, minMidi, maxMidi, showValidTiming,
             tempo: lessonMeta.tempo,
             beatsPerMeasure: lessonMeta.beatsPerMeasure,
+            beatType: lessonMeta.beatType,
             beatTolerance: beatTolerance
         })
             .then((result) => {
@@ -427,7 +439,10 @@ export default function App() {
                                 <div className="bg-white rounded-[2rem] overflow-hidden border border-gray-100 shadow-xl flex flex-col">
                                     <div className="bg-gray-50 px-6 py-3 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-widest">Data Inspector</div>
                                     <div className="flex-1 overflow-y-auto p-2 text-center flex items-center justify-center">
-                                        <LessonDisplay jsonLesson={exampleJSONLesson} musicXmlLesson={exampleMusicXML} />
+                                        <LessonDisplay 
+                                            jsonLesson={typeof lessonContent === 'string' && (lessonContent.startsWith('{') || lessonContent.startsWith('[')) ? JSON.parse(lessonContent) : (typeof lessonContent === 'object' ? lessonContent : null)} 
+                                            musicXmlLesson={typeof lessonContent === 'string' && lessonContent.trim().startsWith('<') ? lessonContent : null} 
+                                        />
                                     </div>
                                 </div>
                             </div>
