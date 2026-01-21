@@ -5,8 +5,8 @@ export default function ControlPanel({
     paused,
     togglePause,
     restart,
-    tempoFactor,
-    setTempoFactor
+    userBpm,
+    setUserBpm
 }) {
     return (
         <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border border-gray-50 flex flex-col gap-8">
@@ -35,11 +35,11 @@ export default function ControlPanel({
                 <div className="space-y-4">
                     <div className="flex justify-between text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
                         <span>Tempo</span>
-                        <span className="text-brand-primary">{tempoFactor.toFixed(1)}x</span>
+                        <span className="text-brand-primary">{Math.round(userBpm)} BPM</span>
                     </div>
                     <input
-                        type="range" min="0.5" max="3.0" step="0.1" value={tempoFactor}
-                        onChange={(e) => setTempoFactor(Number(e.target.value))}
+                        type="range" min="30" max="240" step="1" value={userBpm}
+                        onChange={(e) => setUserBpm(Number(e.target.value))}
                         className="w-full accent-brand-primary h-2.5 bg-gray-100 rounded-full appearance-none cursor-pointer"
                     />
                 </div>

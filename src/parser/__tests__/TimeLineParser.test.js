@@ -6,7 +6,8 @@ import { simpleMusicXMLtoTimeline, exampleMusicXML } from '../TimeLineParser';
 describe('TimeLineParser - MusicXML', () => {
     it('extracts measure and beat information correctly', () => {
         const tempo = 60; // 1 beat = 1 second
-        const timeline = simpleMusicXMLtoTimeline(exampleMusicXML, tempo);
+        const result = simpleMusicXMLtoTimeline(exampleMusicXML, tempo);
+        const timeline = result.timeline;
 
         expect(timeline).toHaveLength(3);
         
@@ -66,7 +67,8 @@ describe('TimeLineParser - MusicXML', () => {
   </part>
 </score-partwise>`;
         
-        const timeline = simpleMusicXMLtoTimeline(chordXML, 60);
+        const result = simpleMusicXMLtoTimeline(chordXML, 60);
+        const timeline = result.timeline;
         expect(timeline).toHaveLength(2);
         
         // Both should start at beat 1

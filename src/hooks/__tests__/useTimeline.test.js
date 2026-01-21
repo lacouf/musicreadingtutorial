@@ -53,10 +53,16 @@ describe('useTimeline', () => {
     vi.clearAllMocks();
 
     // Default mock returns for parseTimeline
-    TimeLineParser.parseTimeline.mockReturnValue([
-      { midi: 60, pitch: 'C4', vfKey: 'c/4', start: 0, durationBeats: 1 },
-      { midi: 62, pitch: 'D4', vfKey: 'd/4', start: 1, durationBeats: 1 }
-    ]);
+    TimeLineParser.parseTimeline.mockReturnValue({
+        timeline: [
+            { midi: 60, pitch: 'C4', vfKey: 'c/4', start: 0, durationBeats: 1 },
+            { midi: 62, pitch: 'D4', vfKey: 'd/4', start: 1, durationBeats: 1 }
+        ],
+        metadata: {
+            beatsPerMeasure: 4,
+            beatType: 4
+        }
+    });
 
     // Default mock returns for generateRandomTimeline
     NoteGenerator.generateRandomTimeline.mockReturnValue([
@@ -86,52 +92,58 @@ describe('useTimeline', () => {
   });
 
   describe('Lesson Mode Loading', () => {
-    it('should load lesson with valid lesson ID', () => {
+    it('should load lesson with valid lesson ID', async () => {
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(TimeLineParser.parseTimeline).toHaveBeenCalledWith(
         'json',
         expect.objectContaining({ tempo: 100 }),
-        100
+        80
       );
       expect(result.current.lessonMeta.tempo).toBe(100);
       expect(result.current.lessonMeta.beatsPerMeasure).toBe(4);
       expect(result.current.timelineVersion).toBe(1);
     });
 
-    it('should load lesson with different time signature', () => {
+    it('should load lesson with different time signature', async () => {
+      // Mock specific return for this test
+      TimeLineParser.parseTimeline.mockReturnValueOnce({
+        timeline: [],
+        metadata: { beatsPerMeasure: 3, beatType: 4 }
+      });
+
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-2', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(result.current.lessonMeta.tempo).toBe(120);
       expect(result.current.lessonMeta.beatsPerMeasure).toBe(3);
     });
 
-    it('should fallback to first lesson if ID not found', () => {
+    it('should fallback to first lesson if ID not found', async () => {
       const { result } = renderHook(() =>
         useTimeline('lesson', 'non-existent-id', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       // Should use first lesson
       expect(result.current.lessonMeta.tempo).toBe(100);
     });
 
-    it('should handle lesson without time signature', () => {
+    it('should handle lesson without time signature', async () => {
       const lessonWithoutTimeSig = {
         id: 'no-timesig',
         data: { tempo: 90, notes: [] }
@@ -143,22 +155,46 @@ describe('useTimeline', () => {
         useTimeline('lesson', 'no-timesig', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(result.current.lessonMeta.beatsPerMeasure).toBe(4); // default
     });
+
+    it('should prioritize sources correctly (file > xml > data)', async () => {
+        const complexLesson = {
+            id: 'priority-test',
+            data: { notes: [], tempo: 100 },
+            xml: '<score-partwise><part><measure number="1"><note><duration>1</duration></note></measure></part></score-partwise>'
+        };
+        TimeLineParser.AVAILABLE_LESSONS.push(complexLesson);
+
+        const { result } = renderHook(() =>
+            useTimeline('lesson', 'priority-test', mockSettings)
+        );
+
+        await act(async () => {
+            await result.current.loadTimeline();
+        });
+
+        // Should have called parseTimeline with 'musicxml' because 'xml' exists, even though 'data' also exists
+        expect(TimeLineParser.parseTimeline).toHaveBeenCalledWith(
+            'musicxml',
+            complexLesson.xml,
+            80
+        );
+    });
   });
 
   describe('Practice Mode Loading', () => {
-    it('should generate random timeline in practice mode', () => {
+    it('should generate random timeline in practice mode', async () => {
       const { result } = renderHook(() =>
         useTimeline('practice', null, mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(NoteGenerator.generateRandomTimeline).toHaveBeenCalledWith(
@@ -171,20 +207,20 @@ describe('useTimeline', () => {
       );
     });
 
-    it('should use default tempo and time signature in practice mode', () => {
+    it('should use default tempo and time signature in practice mode', async () => {
       const { result } = renderHook(() =>
         useTimeline('practice', null, mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(result.current.lessonMeta.tempo).toBe(80);
       expect(result.current.lessonMeta.beatsPerMeasure).toBe(4);
     });
 
-    it('should handle different enabled durations', () => {
+    it('should handle different enabled durations', async () => {
       const customSettings = {
         ...mockSettings,
         enabledDurations: {
@@ -200,8 +236,8 @@ describe('useTimeline', () => {
         useTimeline('practice', null, customSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(NoteGenerator.generateRandomTimeline).toHaveBeenCalledWith(
@@ -214,7 +250,7 @@ describe('useTimeline', () => {
       );
     });
 
-    it('should default to quarter notes if no durations enabled', () => {
+    it('should default to quarter notes if no durations enabled', async () => {
       const noEnabledSettings = {
         ...mockSettings,
         enabledDurations: {
@@ -230,8 +266,8 @@ describe('useTimeline', () => {
         useTimeline('practice', null, noEnabledSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(NoteGenerator.generateRandomTimeline).toHaveBeenCalledWith(
@@ -244,15 +280,15 @@ describe('useTimeline', () => {
       );
     });
 
-    it('should pass includeSharps setting to generator', () => {
+    it('should pass includeSharps setting to generator', async () => {
       const sharpsSettings = { ...mockSettings, includeSharps: true };
 
       const { result } = renderHook(() =>
         useTimeline('practice', null, sharpsSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(NoteGenerator.generateRandomTimeline).toHaveBeenCalledWith(
@@ -267,36 +303,38 @@ describe('useTimeline', () => {
   });
 
   describe('Timeline Normalization', () => {
-    it('should normalize timeline with midi field present', () => {
-      TimeLineParser.parseTimeline.mockReturnValueOnce([
-        { midi: 60, start: 0, durationBeats: 1 }
-      ]);
+    it('should normalize timeline with midi field present', async () => {
+      TimeLineParser.parseTimeline.mockReturnValueOnce({
+        timeline: [{ midi: 60, start: 0, durationBeats: 1 }],
+        metadata: { beatsPerMeasure: 4 }
+      });
 
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       const timeline = result.current.timelineRef.current;
       expect(timeline[0].midi).toBe(60);
       expect(timeline[0].vfKey).toBe('c/4');
-      expect(timeline[0].pitch).toBe('c/4');
+      expect(timeline[0].pitch).toBe('C4');
     });
 
-    it('should fallback to pitch field when midi is missing', () => {
-      TimeLineParser.parseTimeline.mockReturnValueOnce([
-        { pitch: 'D4', start: 0, durationBeats: 1 }
-      ]);
+    it('should fallback to pitch field when midi is missing', async () => {
+      TimeLineParser.parseTimeline.mockReturnValueOnce({
+        timeline: [{ pitch: 'D4', start: 0, durationBeats: 1 }],
+        metadata: { beatsPerMeasure: 4 }
+      });
 
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       const timeline = result.current.timelineRef.current;
@@ -304,19 +342,22 @@ describe('useTimeline', () => {
       expect(timeline[0].vfKey).toBe('d/4');
     });
 
-    it('should fallback through multiple fields (midi → pitch → key → note → name → vfKey)', () => {
-      TimeLineParser.parseTimeline.mockReturnValueOnce([
-        { key: 'E4', start: 0, durationBeats: 1 },
-        { note: 'F4', start: 1, durationBeats: 1 },
-        { name: 'G4', start: 2, durationBeats: 1 }
-      ]);
+    it('should fallback through multiple fields (midi → pitch → key → note → name → vfKey)', async () => {
+      TimeLineParser.parseTimeline.mockReturnValueOnce({
+        timeline: [
+            { key: 'E4', start: 0, durationBeats: 1 },
+            { note: 'F4', start: 1, durationBeats: 1 },
+            { name: 'G4', start: 2, durationBeats: 1 }
+        ],
+        metadata: { beatsPerMeasure: 4 }
+      });
 
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       const timeline = result.current.timelineRef.current;
@@ -325,17 +366,18 @@ describe('useTimeline', () => {
       expect(timeline[2].midi).toBe(67); // G4
     });
 
-    it('should handle vfKey field correctly', () => {
-      TimeLineParser.parseTimeline.mockReturnValueOnce([
-        { vfKey: 'g/4', start: 0, durationBeats: 1 }
-      ]);
+    it('should handle vfKey field correctly', async () => {
+      TimeLineParser.parseTimeline.mockReturnValueOnce({
+        timeline: [{ vfKey: 'g/4', start: 0, durationBeats: 1 }],
+        metadata: { beatsPerMeasure: 4 }
+      });
 
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       const timeline = result.current.timelineRef.current;
@@ -343,34 +385,36 @@ describe('useTimeline', () => {
       expect(timeline[0].vfKey).toBe('g/4');
     });
 
-    it('should handle keys array (first element)', () => {
-      TimeLineParser.parseTimeline.mockReturnValueOnce([
-        { keys: ['a/4', 'c/5'], start: 0, durationBeats: 1 }
-      ]);
+    it('should handle keys array (first element)', async () => {
+      TimeLineParser.parseTimeline.mockReturnValueOnce({
+        timeline: [{ keys: ['a/4', 'c/5'], start: 0, durationBeats: 1 }],
+        metadata: { beatsPerMeasure: 4 }
+      });
 
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       const timeline = result.current.timelineRef.current;
       expect(timeline[0].midi).toBe(69); // A4 from keys[0]
     });
 
-    it('should handle numeric MIDI values correctly', () => {
-      TimeLineParser.parseTimeline.mockReturnValueOnce([
-        { midi: 72, start: 0, durationBeats: 1 } // C5
-      ]);
+    it('should handle numeric MIDI values correctly', async () => {
+      TimeLineParser.parseTimeline.mockReturnValueOnce({
+        timeline: [{ midi: 72, start: 0, durationBeats: 1 }], // C5
+        metadata: { beatsPerMeasure: 4 }
+      });
 
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       const timeline = result.current.timelineRef.current;
@@ -378,17 +422,18 @@ describe('useTimeline', () => {
       expect(timeline[0].vfKey).toBe('c/5');
     });
 
-    it('should set null values when no valid pitch source found', () => {
-      TimeLineParser.parseTimeline.mockReturnValueOnce([
-        { start: 0, durationBeats: 1 } // No pitch info at all
-      ]);
+    it('should set null values when no valid pitch source found', async () => {
+      TimeLineParser.parseTimeline.mockReturnValueOnce({
+        timeline: [{ start: 0, durationBeats: 1 }], // No pitch info at all
+        metadata: { beatsPerMeasure: 4 }
+      });
 
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       const timeline = result.current.timelineRef.current;
@@ -398,36 +443,36 @@ describe('useTimeline', () => {
   });
 
   describe('onTimelineLoaded Callback', () => {
-    it('should invoke callback when timeline loads', () => {
+    it('should invoke callback when timeline loads', async () => {
       const onLoaded = vi.fn();
 
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings, onLoaded)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(onLoaded).toHaveBeenCalledWith(
-        { tempo: 100, beatsPerMeasure: 4 },
+        expect.objectContaining({ tempo: 100 }),
         'lesson'
       );
     });
 
-    it('should handle undefined callback gracefully', () => {
+    it('should handle undefined callback gracefully', async () => {
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings, undefined)
       );
 
-      expect(() => {
-        act(() => {
-          result.current.loadTimeline();
+      await expect(async () => {
+        await act(async () => {
+            await result.current.loadTimeline();
         });
       }).not.toThrow();
     });
 
-    it('should update callback reference when it changes', () => {
+    it('should update callback reference when it changes', async () => {
       const onLoaded1 = vi.fn();
       const onLoaded2 = vi.fn();
 
@@ -436,8 +481,8 @@ describe('useTimeline', () => {
         { initialProps: { callback: onLoaded1 } }
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(onLoaded1).toHaveBeenCalledTimes(1);
@@ -445,8 +490,8 @@ describe('useTimeline', () => {
       // Change callback
       rerender({ callback: onLoaded2 });
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(onLoaded2).toHaveBeenCalledTimes(1);
@@ -455,21 +500,21 @@ describe('useTimeline', () => {
   });
 
   describe('Timeline Version', () => {
-    it('should increment timelineVersion on each load', () => {
+    it('should increment timelineVersion on each load', async () => {
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings)
       );
 
       expect(result.current.timelineVersion).toBe(0);
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(result.current.timelineVersion).toBe(1);
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(result.current.timelineVersion).toBe(2);
@@ -477,13 +522,13 @@ describe('useTimeline', () => {
   });
 
   describe('TimelineRef', () => {
-    it('should update timelineRef.current with normalized timeline', () => {
+    it('should update timelineRef.current with normalized timeline', async () => {
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       expect(result.current.timelineRef.current).toHaveLength(2);
@@ -493,24 +538,25 @@ describe('useTimeline', () => {
       });
     });
 
-    it('should preserve all original event properties', () => {
-      TimeLineParser.parseTimeline.mockReturnValueOnce([
-        {
-          midi: 60,
-          start: 0,
-          durationBeats: 1,
-          measure: 1,
-          beat: 1,
-          customField: 'test'
-        }
-      ]);
+    it('should preserve all original event properties', async () => {
+      TimeLineParser.parseTimeline.mockReturnValueOnce({
+        timeline: [{
+            midi: 60,
+            start: 0,
+            durationBeats: 1,
+            measure: 1,
+            beat: 1,
+            customField: 'test'
+        }],
+        metadata: { beatsPerMeasure: 4 }
+      });
 
       const { result } = renderHook(() =>
         useTimeline('lesson', 'test-lesson-1', mockSettings)
       );
 
-      act(() => {
-        result.current.loadTimeline();
+      await act(async () => {
+        await result.current.loadTimeline();
       });
 
       const event = result.current.timelineRef.current[0];

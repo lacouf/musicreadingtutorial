@@ -5,6 +5,7 @@ export function beatsToVexDuration(beats) {
     const b = Number(beats);
     
     // Exact standard mappings
+    if (Math.abs(b - 6) < 0.01) return { duration: 'w', dots: 1 };
     if (Math.abs(b - 4) < 0.01) return { duration: 'w', dots: 0 };
     if (Math.abs(b - 3) < 0.01) return { duration: 'h', dots: 1 };
     if (Math.abs(b - 2) < 0.01) return { duration: 'h', dots: 0 };
@@ -23,6 +24,8 @@ export function beatsToVexDuration(beats) {
     if (Math.abs(b - (1/3)) < 0.01) return { duration: '8', dots: 0, tuplet: { actual: 3, normal: 2 } };
     // Quarter triplet = 2/3 beat = 0.666...
     if (Math.abs(b - (2/3)) < 0.01) return { duration: 'q', dots: 0, tuplet: { actual: 3, normal: 2 } };
+    // Half triplet = 4/3 beat = 1.333...
+    if (Math.abs(b - (4/3)) < 0.01) return { duration: 'h', dots: 0, tuplet: { actual: 3, normal: 2 } };
 
     // Fallback to closest power of 2
     if (b > 2) return { duration: 'w', dots: 0 };

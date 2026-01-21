@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { parseTimeline, AVAILABLE_LESSONS } from '../parser/TimeLineParser';
 import { generateRandomTimeline } from '../core/NoteGenerator';
-import { parsePitchToMidi, midiToVexKey } from '../core/musicUtils';
+import { parsePitchToMidi, midiToVexKey, midiToPitch } from '../core/musicUtils';
 import { TIMING, MIDI } from '../core/constants';
 
 const DEFAULT_TEMPO = 80;

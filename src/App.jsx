@@ -19,7 +19,6 @@ import { parsePitchToMidi } from './core/musicUtils';
 import { RENDERING, TIMING, MIDI } from './core/constants';
 import { calculateScrollSpeed } from './core/layoutUtils';
 
-const DEFAULT_TEMPO = TIMING.DEFAULT_TEMPO;
 const LEAD_IN_SECONDS = TIMING.LEAD_IN_SECONDS;
 
 export default function App() {
@@ -68,7 +67,7 @@ export default function App() {
     const viewportHeight = RENDERING.VIEWPORT_HEIGHT;
     const [clipX, setClipX] = useState(0);
 
-    const [tempoFactor, setTempoFactor] = useState(DEFAULT_TEMPO);
+    const [userBpm, setUserBpm] = useState(80);
     const [minNote, setMinNote] = useState('C4');
     const [maxNote, setMaxNote] = useState('G4');
     const [includeSharps, setIncludeSharps] = useState(false);
@@ -112,7 +111,7 @@ export default function App() {
         pausedRef, 
         togglePause: engineTogglePause, 
         resetPlayback
-    } = usePlayback(lessonMeta, tempoFactor, LEAD_IN_SECONDS);
+    } = usePlayback(lessonMeta, userBpm, LEAD_IN_SECONDS);
 
     // Custom Hook: MIDI System
     const {
@@ -143,8 +142,7 @@ export default function App() {
     };
 
     const restart = () => {
-        const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
-        const currentSpeed = baseSpeed / tempoFactor;
+        const currentSpeed = calculateScrollSpeed(userBpm, RENDERING.PIXELS_PER_BEAT);
         const startOffset = -LEAD_IN_SECONDS * currentSpeed;
         
         resetPlayback(startOffset, -LEAD_IN_SECONDS);
@@ -155,11 +153,14 @@ export default function App() {
 
     // Effect: Reset playback when timeline changes
     useEffect(() => {
-        const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
-        const startScroll = (-LEAD_IN_SECONDS * baseSpeed) / tempoFactor;
+        const targetBpm = lessonMeta.tempo || 80;
+        setUserBpm(targetBpm);
+
+        const currentSpeed = calculateScrollSpeed(targetBpm, RENDERING.PIXELS_PER_BEAT);
+        const startScroll = -LEAD_IN_SECONDS * currentSpeed;
         resetPlayback(startScroll, -LEAD_IN_SECONDS);
         setLog(l => [...l, `Loaded ${mode} timeline`]); // Use setLog
-    }, [timelineVersion]);
+    }, [timelineVersion, lessonMeta]);
 
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -396,8 +397,8 @@ export default function App() {
                             paused={paused}
                             togglePause={togglePause}
                             restart={restart}
-                            tempoFactor={tempoFactor}
-                            setTempoFactor={setTempoFactor}
+                            userBpm={userBpm}
+                            setUserBpm={setUserBpm}
                         />
 
                         {/* Settings Side Panel */}

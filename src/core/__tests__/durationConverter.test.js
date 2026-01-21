@@ -12,16 +12,20 @@ describe('beatsToVexDuration', () => {
     });
 
     it('converts dotted durations', () => {
-        expect(beatsToVexDuration(3)).toEqual({ duration: 'hd', dots: 1 }); // Dotted half
-        expect(beatsToVexDuration(1.5)).toEqual({ duration: 'qd', dots: 1 }); // Dotted quarter
-        expect(beatsToVexDuration(0.75)).toEqual({ duration: '8d', dots: 1 }); // Dotted eighth
-        expect(beatsToVexDuration(6)).toEqual({ duration: 'wd', dots: 1 }); // Dotted whole
+        expect(beatsToVexDuration(3)).toEqual({ duration: 'h', dots: 1 }); // Dotted half
+        expect(beatsToVexDuration(1.5)).toEqual({ duration: 'q', dots: 1 }); // Dotted quarter
+        expect(beatsToVexDuration(0.75)).toEqual({ duration: '8', dots: 1 }); // Dotted eighth
+        expect(beatsToVexDuration(6)).toEqual({ duration: 'w', dots: 1 }); // Dotted whole
     });
 
     it('handles fallback for unknown durations', () => {
-        // Fallback to quarter for weird values, or maybe closest?
         // For now, let's assume simple quantization or direct mapping
         // If it doesn't match known, default to 'q'
-        expect(beatsToVexDuration(0.33)).toEqual({ duration: 'q', dots: 0 }); 
+        // Actually, 0.33 is close to 1/3 (eighth note triplet)
+        expect(beatsToVexDuration(0.33)).toEqual({
+            duration: '8',
+            dots: 0,
+            tuplet: { actual: 3, normal: 2 }
+        }); 
     });
 });

@@ -57,6 +57,8 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
         ? ((lastNote.measure || 1) - 1) * beatsPerMeasure + ((lastNote.beat || 1) - 1) + (lastNote.beatFraction || 0) + (lastNote.durationBeats || 0)
         : 20;
 
+    console.log(`ScoreRenderer: Rendering ${filteredTimeline.length} notes. Total Beats: ${totalBeats}. Viewport: ${viewportWidth}x${viewportHeight}`);
+
     notesCanvas.width = Math.max(2400, Math.ceil(totalBeats * pixelsPerBeat) + 500);
     notesCanvas.height = viewportHeight;
     const notesRenderer = new Renderer(notesCanvas, Renderer.Backends.CANVAS);
@@ -116,55 +118,76 @@ export async function renderScoreToCanvases(stavesCanvas, notesCanvas, timeline 
 
         // Helper to create and collect a chord (or single note)
         const createChord = (items, stave, staveY, targetArray, measureGroup, clefName) => {
-            if (items.length === 0) return;
-            
-            const vData = beatsToVexDuration(items[0].durationBeats || 1);
-            const { duration, dots } = vData;
-            
-            const keys = [];
-            const modifiers = [];
-
-            items.forEach((ev, index) => {
-                const raw = (ev.pitch || ev.key || '').toString().trim();
-                // Support multiple accidentals (e.g. bb, ##)
-                const m = raw.match(/^([A-Ga-g])([#b]*)\/?(-?\d+)$/);
-                if (m) {
-                    const step = m[1].toLowerCase();
-                    const acc = m[2];
-                    const oct = m[3];
-                    keys.push(`${step}/${oct}`);
-                    if (acc) {
-                        modifiers.push({ index, type: acc });
-                    }
-                }
-            });
-
-            if (keys.length === 0) return;
-
-            const note = new StaveNote({ keys, duration, clef: clefName });
-            if (dots > 0) note.addModifier(new Dot(), 0);
-
-            modifiers.forEach(mod => {
-                let vexAcc;
-                if (mod.type === '#') vexAcc = '#';
-                else if (mod.type === 'b') vexAcc = 'b';
-                else if (mod.type === '##') vexAcc = '##';
-                else if (mod.type === 'bb') vexAcc = 'bb';
-                else if (mod.type === 'n') vexAcc = 'n';
+            try {
+                if (items.length === 0) return;
                 
-                if (vexAcc) note.addModifier(new Accidental(vexAcc), mod.index);
-            });
+                const vData = beatsToVexDuration(items[0].durationBeats || 1);
+                const { duration, dots } = vData;
+                
+                const keys = [];
+                const modifiers = [];
 
-            // Draw validation window immediately
-            if (showValidTiming) {
-                notesCtx.fillStyle = COLORS.VALIDATION_GREEN;
-                notesCtx.fillRect(logicX - windowPixels, staveY, windowPixels * 2, RENDERING.VALIDATION_WINDOW_HEIGHT);
+                items.forEach((ev, index) => {
+                    // Prefer vfKey which is already normalized (e.g. "c/4")
+                    const raw = (ev.vfKey || ev.pitch || ev.key || '').toString().trim();
+                    // Support multiple accidentals (e.g. bb, ##)
+                    // VexFlow keys format: "c/4", "c#/4", "cb/4"
+                    // Pitch format: "C4", "C#4"
+                    
+                    let step, acc, oct;
+
+                    if (raw.includes('/')) {
+                        const parts = raw.split('/');
+                        const stepAcc = parts[0]; // "c", "c#", "cb"
+                        oct = parts[1];
+                        step = stepAcc.charAt(0).toLowerCase();
+                        acc = stepAcc.substring(1);
+                    } else {
+                        const m = raw.match(/^([A-Ga-g])([#b]*)\/?(-?\d+)$/);
+                        if (m) {
+                            step = m[1].toLowerCase();
+                            acc = m[2];
+                            oct = m[3];
+                        }
+                    }
+
+                    if (step && oct) {
+                        keys.push(`${step}/${oct}`);
+                        if (acc) {
+                            modifiers.push({ index, type: acc });
+                        }
+                    }
+                });
+
+                if (keys.length === 0) return;
+
+                const note = new StaveNote({ keys, duration, clef: clefName });
+                if (dots > 0) note.addModifier(new Dot(), 0);
+
+                modifiers.forEach(mod => {
+                    let vexAcc;
+                    if (mod.type === '#') vexAcc = '#';
+                    else if (mod.type === 'b') vexAcc = 'b';
+                    else if (mod.type === '##') vexAcc = '##';
+                    else if (mod.type === 'bb') vexAcc = 'bb';
+                    else if (mod.type === 'n') vexAcc = 'n';
+                    
+                    if (vexAcc) note.addModifier(new Accidental(vexAcc), mod.index);
+                });
+
+                // Draw validation window immediately
+                if (showValidTiming) {
+                    notesCtx.fillStyle = COLORS.VALIDATION_GREEN;
+                    notesCtx.fillRect(logicX - windowPixels, staveY, windowPixels * 2, RENDERING.VALIDATION_WINDOW_HEIGHT);
+                }
+
+                const tc = new TickContext();
+                tc.addTickable(note).preFormat().setX(vexX);
+                note.setContext(notesCtx).setStave(stave);
+                targetArray.push(note);
+            } catch (e) {
+                console.error(`Error rendering chord at measure ${measureIndex}:`, e);
             }
-
-            const tc = new TickContext();
-            tc.addTickable(note).preFormat().setX(vexX);
-            note.setContext(notesCtx).setStave(stave);
-            targetArray.push(note);
         };
 
         const measureGroup = getMeasureGroup(measureIndex);

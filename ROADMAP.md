@@ -149,8 +149,9 @@ pixelsPerSecond = pixelsPerBeat * BPM / 60
 - `src/App.jsx` - Add current measure/beat state
 
 #### BPM Control
-**Status:** Only tempo factor slider exists
-- Current: Tempo factor slider (0.5x-3.0x multiplier)
+**Status:** BPM control implemented (v1.0)
+- Previous: Tempo factor slider (0.5x-3.0x multiplier)
+- Current: Direct BPM slider (30-240 BPM)
 - Need: Separate BPM control (e.g., 60, 80, 120 BPM)
 - Lessons already have `tempo` field in metadata
 
@@ -531,7 +532,7 @@ src/core/constants.js             // BEATS, TIMING, RENDERING constants
 
 ### Medium Priority (Phase B + Phase C)
 4. **Time signature selector** - Enables more lesson variety
-5. **BPM control** - Better than tempo factor for musicians
+5. **BPM control** - Implemented (Replaced tempo factor with direct BPM control)
 6. **Render rests** - Already parsed, just need rendering
 7. **Improve beaming rules** - Beat-aware beaming
 

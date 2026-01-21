@@ -7,41 +7,41 @@ export const exampleJSONLesson = {
     tempo: 80,
     notes: [
         // === Section 1: Single notes (warm up) ===
-        { measure: 1, beat: 1, beatFraction: 0, durationBeats: 0.5, start: 0.0, dur: 0.5, pitch: 'C4', midi: 60 },
-        { measure: 1, beat: 1, beatFraction: 0.5, durationBeats: 0.5, start: 0.375, dur: 0.375, pitch: 'D4', midi: 62 }, // Adjusted for tempo 80
+        { measure: 1, beat: 1, beatFraction: 0, durationBeats: 0.5, start: 0.0, dur: 0.375, pitch: 'C4', midi: 60 },
+        { measure: 1, beat: 1, beatFraction: 0.5, durationBeats: 0.5, start: 0.375, dur: 0.375, pitch: 'D4', midi: 62 }, 
         { measure: 1, beat: 2, beatFraction: 0, durationBeats: 0.5, start: 0.75, dur: 0.375, pitch: 'E4', midi: 64 },
 
         // === Section 2: Two-note intervals (thirds) ===
-        // C-E interval at 2.0s
-        { start: 2.0, dur: 1.0, pitch: 'C4' },
-        { start: 2.0, dur: 1.0, pitch: 'E4' },
+        // C-E interval at Beat 3 (2.25s)
+        { start: 2.25, dur: 0.75, pitch: 'C4' },
+        { start: 2.25, dur: 0.75, pitch: 'E4' },
 
-        // D-F interval at 3.5s
-        { start: 3.5, dur: 1.0, pitch: 'D4' },
-        { start: 3.5, dur: 1.0, pitch: 'F4' },
+        // D-F interval at Beat 5 (3.75s)
+        { start: 3.75, dur: 0.75, pitch: 'D4' },
+        { start: 3.75, dur: 0.75, pitch: 'F4' },
 
         // === Section 3: Three-note chord (C major triad) ===
-        // C-E-G chord at 5.0s
-        { start: 5.0, dur: 1.5, pitch: 'C4' },
-        { start: 5.0, dur: 1.5, pitch: 'E4' },
-        { start: 5.0, dur: 1.5, pitch: 'G4' },
+        // C-E-G chord at Beat 8 (6.0s)
+        { start: 6.0, dur: 1.125, pitch: 'C4' },
+        { start: 6.0, dur: 1.125, pitch: 'E4' },
+        { start: 6.0, dur: 1.125, pitch: 'G4' },
 
         // === Section 4: Bass + Treble (polyphonic melody) ===
-        // Bass note with treble melody
-        { start: 7.0, dur: 2.0, pitch: 'C3' },  // Bass holds
-        { start: 7.0, dur: 0.5, pitch: 'E4' },  // Treble melody
-        { start: 7.5, dur: 0.5, pitch: 'G4' },
-        { start: 8.0, dur: 0.5, pitch: 'C5' },
+        // Bass note with treble melody at Beat 12 (9.0s)
+        { start: 9.0, dur: 1.5, pitch: 'C3' },  // Bass holds
+        { start: 9.0, dur: 0.375, pitch: 'E4' },  // Treble melody
+        { start: 9.375, dur: 0.375, pitch: 'G4' },
+        { start: 9.75, dur: 0.375, pitch: 'C5' },
 
-        // === Section 5: Another triad (G major) ===
-        { start: 9.5, dur: 1.5, pitch: 'G3' },
-        { start: 9.5, dur: 1.5, pitch: 'B3' },
-        { start: 9.5, dur: 1.5, pitch: 'D4' },
+        // === Section 5: Another triad (G major) at Beat 16 (12.0s)
+        { start: 12.0, dur: 1.125, pitch: 'G3' },
+        { start: 12.0, dur: 1.125, pitch: 'B3' },
+        { start: 12.0, dur: 1.125, pitch: 'D4' },
 
-        // === Section 6: Final chord (F major) ===
-        { start: 11.5, dur: 2.0, pitch: 'F3' },
-        { start: 11.5, dur: 2.0, pitch: 'A3' },
-        { start: 11.5, dur: 2.0, pitch: 'C4' }
+        // === Section 6: Final chord (F major) at Beat 20 (15.0s)
+        { start: 15.0, dur: 1.5, pitch: 'F3' },
+        { start: 15.0, dur: 1.5, pitch: 'A3' },
+        { start: 15.0, dur: 1.5, pitch: 'C4' }
     ]
 };
 
@@ -159,8 +159,8 @@ export const rhythmMixLessonXML = `<?xml version="1.0" encoding="UTF-8"?>
 </score-partwise>`;
 
 export const AVAILABLE_LESSONS = [
-    { id: 'polyphonic', name: 'Polyphonic Chords', data: exampleJSONLesson, xml: exampleMusicXML },
-    { id: 'rhythm', name: 'Rhythm & Beaming', data: rhythmMixLessonJSON, xml: rhythmMixLessonXML },
+    { id: 'polyphonic', name: 'Polyphonic Chords', data: exampleJSONLesson },
+    { id: 'rhythm', name: 'Rhythm & Beaming', data: rhythmMixLessonJSON },
     { id: 'nocturne', name: 'Chopin - Nocturne No. 1', file: '/Nocturne.xml' }
 ];
 
@@ -327,7 +327,8 @@ export function simpleMusicXMLtoTimeline(xmlString, tempo = 60) {
 
 export function parseTimeline(lessonType, lessonData, tempo) {
     if (lessonType === 'json') {
-        const secPerBeat = TIMING.SECONDS_IN_MINUTE / tempo;
+        const effectiveTempo = lessonData.tempo || tempo || 60;
+        const secPerBeat = TIMING.SECONDS_IN_MINUTE / effectiveTempo;
         const beatsPerMeasure = lessonData.timeSignature?.numerator || 4;
         const beatType = lessonData.timeSignature?.denominator || 4;
 

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { calculateScrollSpeed } from '../core/layoutUtils';
 import { RENDERING } from '../core/constants';
 
-export function usePlayback(lessonMeta, tempoFactor, leadInSeconds) {
+export function usePlayback(lessonMeta, currentBpm, leadInSeconds) {
     const [scrollOffset, setScrollOffset] = useState(0); 
     const [paused, setPaused] = useState(true);
     const pausedRef = useRef(true);
@@ -35,8 +35,7 @@ export function usePlayback(lessonMeta, tempoFactor, leadInSeconds) {
             totalActiveTimeRef.current += deltaTime;
             lastFrameTimeRef.current = timestamp;
 
-            const baseSpeed = calculateScrollSpeed(lessonMeta.tempo, RENDERING.PIXELS_PER_BEAT);
-            const currentSpeed = baseSpeed / tempoFactor;
+            const currentSpeed = calculateScrollSpeed(currentBpm, RENDERING.PIXELS_PER_BEAT);
             const deltaScroll = deltaTime * currentSpeed;
             const newScrollOffset = scrollOffsetRef.current + deltaScroll;
             
@@ -48,7 +47,7 @@ export function usePlayback(lessonMeta, tempoFactor, leadInSeconds) {
 
         animationFrameId.current = requestAnimationFrame(animate);
         return () => cancelAnimationFrame(animationFrameId.current);
-    }, [paused, tempoFactor, lessonMeta]);
+    }, [paused, currentBpm, lessonMeta]);
 
     const togglePause = (shouldPause) => {
         setPaused(prev => {
