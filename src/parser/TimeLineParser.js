@@ -4,7 +4,7 @@ import { TIMING } from '../core/constants';
 
 export const exampleJSONLesson = {
     title: 'Polyphonic Exercise with Chords',
-    tempo: 80,
+    tempo: 40,
     notes: [
         // === Section 1: Single notes (warm up) ===
         { measure: 1, beat: 1, beatFraction: 0, durationBeats: 0.5, start: 0.0, dur: 0.375, pitch: 'C4', midi: 60 },
@@ -97,7 +97,7 @@ export const exampleMusicXML = `<?xml version="1.0" encoding="UTF-8"?>
 
 export const rhythmMixLessonJSON = {
     title: 'Rhythm & Beaming Exercise',
-    tempo: 80,
+    tempo: 40,
     timeSignature: { numerator: 4, denominator: 4 },
     notes: [
         // Measure 1: 4 Eighth notes beamed together (0.5 duration each)

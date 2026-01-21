@@ -83,7 +83,7 @@ describe('useTimeline', () => {
 
       expect(result.current.timelineRef.current).toEqual([]);
       expect(result.current.lessonMeta).toEqual({
-        tempo: 80,
+        tempo: 40,
         beatsPerMeasure: 4
       });
       expect(result.current.timelineVersion).toBe(0);
@@ -104,7 +104,7 @@ describe('useTimeline', () => {
       expect(TimeLineParser.parseTimeline).toHaveBeenCalledWith(
         'json',
         expect.objectContaining({ tempo: 100 }),
-        80
+        40
       );
       expect(result.current.lessonMeta.tempo).toBe(100);
       expect(result.current.lessonMeta.beatsPerMeasure).toBe(4);
@@ -182,7 +182,7 @@ describe('useTimeline', () => {
         expect(TimeLineParser.parseTimeline).toHaveBeenCalledWith(
             'musicxml',
             complexLesson.xml,
-            80
+            40
         );
     });
   });
@@ -201,7 +201,7 @@ describe('useTimeline', () => {
         'C4',
         'G4',
         20,
-        80,
+        40,
         false,
         [4.0, 2.0, 1.0] // whole, half, quarter enabled
       );
@@ -216,7 +216,7 @@ describe('useTimeline', () => {
         await result.current.loadTimeline();
       });
 
-      expect(result.current.lessonMeta.tempo).toBe(80);
+      expect(result.current.lessonMeta.tempo).toBe(40);
       expect(result.current.lessonMeta.beatsPerMeasure).toBe(4);
     });
 

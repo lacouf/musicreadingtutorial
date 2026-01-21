@@ -28,7 +28,7 @@ export const createMockTimeline = (count = 3) => {
  * @returns {Object} Mock lesson metadata
  */
 export const createMockLessonMeta = (overrides = {}) => ({
-  tempo: 80,
+  tempo: 40,
   beatsPerMeasure: 4,
   ...overrides
 });
@@ -64,7 +64,7 @@ export const createMockLesson = (overrides = {}) => ({
   name: 'Test Lesson',
   data: {
     title: 'Test Lesson',
-    tempo: 80,
+    tempo: 40,
     timeSignature: { numerator: 4, denominator: 4 },
     notes: createMockTimeline(3)
   },

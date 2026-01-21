@@ -11,7 +11,7 @@ vi.mock('../../core/layoutUtils', () => ({
 
 describe('usePlayback', () => {
   const mockLessonMeta = {
-    tempo: 80,
+    tempo: 40,
     beatsPerMeasure: 4
   };
 

@@ -38,7 +38,7 @@ export default function ControlPanel({
                         <span className="text-brand-primary">{Math.round(userBpm)} BPM</span>
                     </div>
                     <input
-                        type="range" min="30" max="240" step="1" value={userBpm}
+                        type="range" min="10" max="240" step="1" value={userBpm}
                         onChange={(e) => setUserBpm(Number(e.target.value))}
                         className="w-full accent-brand-primary h-2.5 bg-gray-100 rounded-full appearance-none cursor-pointer"
                     />

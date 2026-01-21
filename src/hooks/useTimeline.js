@@ -4,7 +4,7 @@ import { generateRandomTimeline } from '../core/NoteGenerator';
 import { parsePitchToMidi, midiToVexKey, midiToPitch } from '../core/musicUtils';
 import { TIMING, MIDI } from '../core/constants';
 
-const DEFAULT_TEMPO = 80;
+const DEFAULT_TEMPO = 40;
 
 export function useTimeline(mode, selectedLessonId, settings, onTimelineLoaded) {
     const timelineRef = useRef([]);

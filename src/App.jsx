@@ -67,7 +67,7 @@ export default function App() {
     const viewportHeight = RENDERING.VIEWPORT_HEIGHT;
     const [clipX, setClipX] = useState(0);
 
-    const [userBpm, setUserBpm] = useState(80);
+    const [userBpm, setUserBpm] = useState(40);
     const [minNote, setMinNote] = useState('C4');
     const [maxNote, setMaxNote] = useState('G4');
     const [includeSharps, setIncludeSharps] = useState(false);
@@ -153,7 +153,7 @@ export default function App() {
 
     // Effect: Reset playback when timeline changes
     useEffect(() => {
-        const targetBpm = lessonMeta.tempo || 80;
+        const targetBpm = lessonMeta.tempo || 40;
         setUserBpm(targetBpm);
 
         const currentSpeed = calculateScrollSpeed(targetBpm, RENDERING.PIXELS_PER_BEAT);
