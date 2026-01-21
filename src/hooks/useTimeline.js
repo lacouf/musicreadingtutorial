@@ -84,11 +84,16 @@ export function useTimeline(mode, selectedLessonId, settings, onTimelineLoaded) 
         }
 
         const normalizedTimeline = rawTimeline.map(ev => {
-            const pitchSource = ev.midi ?? ev.pitch ?? ev.key ?? ev.note ?? ev.name ?? ev.vfKey ?? (Array.isArray(ev.keys) ? ev.keys[0] : '') ;
+            const originalPitch = ev.pitch || ev.key || null;
+            const pitchSource = ev.midi ?? originalPitch ?? ev.note ?? ev.name ?? ev.vfKey ?? (Array.isArray(ev.keys) ? ev.keys[0] : '') ;
+            
             let midi = (typeof pitchSource === 'number' && Number.isFinite(pitchSource)) ? Math.trunc(pitchSource) : parsePitchToMidi(String(pitchSource || ''));
-            if (midi == null && ev.vfKey) midi = parsePitchToMidi(String(ev.vfKey));
-            const vfKey = midi ? midiToVexKey(midi) : (ev.vfKey || (Array.isArray(ev.keys) ? ev.keys[0] : null));
-            const canonicalPitch = vfKey || (ev.pitch || ev.key || null);
+            
+            // If we have an original pitch string from the parser (like 'Bb4'), keep it!
+            // Only generate a new vfKey/canonicalPitch if we don't have one.
+            const vfKey = originalPitch ? originalPitch.replace(/([A-G][#b]?)(-?\d+)/, '$1/$2').toLowerCase() : (midi ? midiToVexKey(midi) : null);
+            const canonicalPitch = originalPitch || (midi ? midiToPitch(midi) : null);
+
             return { ...ev, midi: midi ?? null, vfKey: vfKey ?? null, pitch: canonicalPitch, key: canonicalPitch };
         });
 
