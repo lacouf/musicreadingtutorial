@@ -70,6 +70,9 @@ export default function App() {
     const [userBpm, setUserBpm] = useState(40);
     const [minNote, setMinNote] = useState('C4');
     const [maxNote, setMaxNote] = useState('G4');
+    const [bassMinNote, setBassMinNote] = useState('C3');
+    const [bassMaxNote, setBassMaxNote] = useState('G3');
+    const [practicingHands, setPracticingHands] = useState(['right']); // 'left', 'right' or both
     const [includeSharps, setIncludeSharps] = useState(false);
     const [showValidTiming, setShowValidTiming] = useState(false);
     const [beatTolerance, setBeatTolerance] = useState(0.1);
@@ -86,9 +89,12 @@ export default function App() {
     const timelineSettings = React.useMemo(() => ({
         minNote, 
         maxNote, 
+        bassMinNote,
+        bassMaxNote,
+        practicingHands,
         includeSharps, 
         enabledDurations
-    }), [minNote, maxNote, includeSharps, enabledDurations]);
+    }), [minNote, maxNote, bassMinNote, bassMaxNote, practicingHands, includeSharps, enabledDurations]);
 
     // Custom Hook: Timeline Manager
     const { 
@@ -181,9 +187,26 @@ export default function App() {
     const renderCurrentTimeline = () => {
         if (!stavesRef.current || !notesRef.current || !timelineRef.current) return;
         
-        // In lesson mode, we show the full range. In practice mode, we use the filters.
-        const minMidi = mode === 'lesson' ? MIDI.MIN_MIDI : (parsePitchToMidi(minNote) ?? MIDI.MIN_MIDI);
-        const maxMidi = mode === 'lesson' ? MIDI.MAX_MIDI : (parsePitchToMidi(maxNote) ?? MIDI.MAX_MIDI);
+        // In lesson mode, we show the full range. In practice mode, we use the filters based on selected hands.
+        let minMidi = MIDI.MIN_MIDI;
+        let maxMidi = MIDI.MAX_MIDI;
+
+        if (mode === 'practice') {
+            const ranges = [];
+            if (practicingHands.includes('right')) {
+                ranges.push(parsePitchToMidi(minNote) ?? MIDI.C4_MIDI);
+                ranges.push(parsePitchToMidi(maxNote) ?? MIDI.G4_MIDI);
+            }
+            if (practicingHands.includes('left')) {
+                ranges.push(parsePitchToMidi(bassMinNote) ?? MIDI.C3_MIDI);
+                ranges.push(parsePitchToMidi(bassMaxNote) ?? MIDI.G3_MIDI);
+            }
+            
+            if (ranges.length > 0) {
+                minMidi = Math.min(...ranges);
+                maxMidi = Math.max(...ranges);
+            }
+        }
 
         renderScoreToCanvases(stavesRef.current, notesRef.current, timelineRef.current, { 
             viewportWidth, viewportHeight, 
@@ -215,8 +238,8 @@ export default function App() {
         return () => observer.disconnect();
     }, []);
 
-    useEffect(() => { loadTimeline(); }, [mode, selectedLessonId, minNote, maxNote, includeSharps]);
-    useEffect(() => { renderCurrentTimeline(); }, [viewportWidth, showValidTiming, lessonMeta, beatTolerance]);
+    useEffect(() => { loadTimeline(); }, [mode, selectedLessonId, minNote, maxNote, bassMinNote, bassMaxNote, practicingHands, includeSharps]);
+    useEffect(() => { renderCurrentTimeline(); }, [viewportWidth, showValidTiming, lessonMeta, beatTolerance, practicingHands, minNote, maxNote, bassMinNote, bassMaxNote]);
 
     const overlayWidth = 120;
     const circleSize = 18;
@@ -416,6 +439,12 @@ export default function App() {
                             setMinNote={setMinNote}
                             maxNote={maxNote}
                             setMaxNote={setMaxNote}
+                            bassMinNote={bassMinNote}
+                            setBassMinNote={setBassMinNote}
+                            bassMaxNote={bassMaxNote}
+                            setBassMaxNote={setBassMaxNote}
+                            practicingHands={practicingHands}
+                            setPracticingHands={setPracticingHands}
                             enabledDurations={enabledDurations}
                             setEnabledDurations={setEnabledDurations}
                             includeSharps={includeSharps}

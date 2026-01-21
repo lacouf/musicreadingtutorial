@@ -5,7 +5,10 @@ import { generateRandomTimeline } from '../NoteGenerator';
 describe('NoteGenerator', () => {
     it('generates timeline with new schema fields', () => {
         const count = 5;
-        const timeline = generateRandomTimeline('C4', 'E4', count);
+        const timeline = generateRandomTimeline({
+            trebleRange: { min: 'C4', max: 'E4' },
+            count
+        });
         
         expect(timeline).toHaveLength(count);
         
@@ -31,7 +34,10 @@ describe('NoteGenerator', () => {
 
     it('advances beats correctly', () => {
         // Default spacing is now 0.0, duration 1.0 -> 1.0 beats per note
-        const timeline = generateRandomTimeline('C4', 'C4', 2);
+        const timeline = generateRandomTimeline({
+            trebleRange: { min: 'C4', max: 'C4' },
+            count: 2
+        });
         
         const note1 = timeline[0];
         const note2 = timeline[1];
@@ -50,17 +56,12 @@ describe('NoteGenerator', () => {
 
     it('respects measure boundaries', () => {
         // Force a note that would cross boundary
-        // 4/4 time. Note 1: 3 beats. Note 2: 2 beats (Whole note).
-        // Note 2 should be clamped to 1 beat or pick a smaller one.
-        const firstNoteDurations = [3.0]; 
-        const secondNoteDurations = [2.0];
-        
-        // We'll call it twice or just use a specific set.
-        // Actually generateRandomTimeline picks randomly from the same array for ALL notes.
-        // If we want Note 1 to be 3.0 and Note 2 to be 2.0, we can use [3.0, 3.0] then [2.0, 2.0]? No.
-        
-        // Let's just use [3.0] for both. Note 1 = 3.0. Note 2 = 3.0 (but only 1.0 fits).
-        const timeline = generateRandomTimeline('C4', 'C4', 2, 60, true, [3.0]);
+        const timeline = generateRandomTimeline({
+            trebleRange: { min: 'C4', max: 'C4' },
+            count: 2,
+            tempo: 60,
+            possibleDurations: [3.0]
+        });
         
         const note1 = timeline[0];
         const note2 = timeline[1];
@@ -69,10 +70,31 @@ describe('NoteGenerator', () => {
         expect(note1.durationBeats).toBe(3);
         
         // Note 2 starts at beat 3. Measure 1 has 1 beat left.
-        // Even if 3.0 was picked, it must be <= 1.0.
         expect(note2.start).toBe(3 * (60/60)); // 3 seconds at 60bpm
         expect(note2.durationBeats).toBeLessThanOrEqual(1.0);
         expect(note1.measure).toBe(1);
         expect(note2.measure).toBe(1);
+    });
+
+    it('generates for both hands and sorts correctly', () => {
+        const timeline = generateRandomTimeline({
+            trebleRange: { min: 'C4', max: 'C4' },
+            bassRange: { min: 'C3', max: 'C3' },
+            hands: ['left', 'right'],
+            count: 2
+        });
+
+        // 2 notes per hand = 4 total
+        expect(timeline).toHaveLength(4);
+
+        // Check if both staffs are present
+        const staffs = new Set(timeline.map(n => n.staff));
+        expect(staffs.has(1)).toBe(true); // Treble
+        expect(staffs.has(2)).toBe(true); // Bass
+
+        // Check if sorted by start time
+        for (let i = 0; i < timeline.length - 1; i++) {
+            expect(timeline[i].start).toBeLessThanOrEqual(timeline[i+1].start);
+        }
     });
 });

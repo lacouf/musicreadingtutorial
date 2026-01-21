@@ -197,14 +197,15 @@ describe('useTimeline', () => {
         await result.current.loadTimeline();
       });
 
-      expect(NoteGenerator.generateRandomTimeline).toHaveBeenCalledWith(
-        'C4',
-        'G4',
-        20,
-        40,
-        false,
-        [4.0, 2.0, 1.0] // whole, half, quarter enabled
-      );
+      expect(NoteGenerator.generateRandomTimeline).toHaveBeenCalledWith({
+        trebleRange: { min: 'C4', max: 'G4' },
+        bassRange: { min: undefined, max: undefined },
+        hands: undefined,
+        count: 20,
+        tempo: 40,
+        includeSharps: false,
+        possibleDurations: [4.0, 2.0, 1.0] // whole, half, quarter enabled
+      });
     });
 
     it('should use default tempo and time signature in practice mode', async () => {
@@ -241,12 +242,9 @@ describe('useTimeline', () => {
       });
 
       expect(NoteGenerator.generateRandomTimeline).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        [2.0, 0.5, 0.25] // half, eighth, sixteenth
+        expect.objectContaining({
+            possibleDurations: [2.0, 0.5, 0.25] // half, eighth, sixteenth
+        })
       );
     });
 
@@ -271,12 +269,9 @@ describe('useTimeline', () => {
       });
 
       expect(NoteGenerator.generateRandomTimeline).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        [1.0] // default quarter note
+        expect.objectContaining({
+            possibleDurations: [1.0] // default quarter note
+        })
       );
     });
 
@@ -292,12 +287,9 @@ describe('useTimeline', () => {
       });
 
       expect(NoteGenerator.generateRandomTimeline).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        true,
-        expect.anything()
+        expect.objectContaining({
+            includeSharps: true
+        })
       );
     });
   });

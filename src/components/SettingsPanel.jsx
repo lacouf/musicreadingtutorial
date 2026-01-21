@@ -7,6 +7,12 @@ export default function SettingsPanel({
     setMinNote,
     maxNote,
     setMaxNote,
+    bassMinNote,
+    setBassMinNote,
+    bassMaxNote,
+    setBassMaxNote,
+    practicingHands,
+    setPracticingHands,
     enabledDurations,
     setEnabledDurations,
     includeSharps,
@@ -15,6 +21,16 @@ export default function SettingsPanel({
     setValidateNoteLength,
     onGenerate
 }) {
+    const handleHandToggle = (hand) => {
+        setPracticingHands(prev => {
+            if (prev.includes(hand)) {
+                if (prev.length === 1) return prev; // Keep at least one hand selected
+                return prev.filter(h => h !== hand);
+            }
+            return [...prev, hand];
+        });
+    };
+
     return (
         <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border border-gray-50 flex flex-col">
             <h3 className="text-xl font-black text-gray-800 mb-8 flex items-center gap-3 italic">
@@ -24,16 +40,59 @@ export default function SettingsPanel({
 
             {mode === 'practice' ? (
                 <div className="space-y-6 flex-1 flex flex-col">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-brand-bg/50 p-4 rounded-3xl border border-white shadow-inner">
-                            <span className="text-[10px] font-black text-gray-400 uppercase block text-center mb-1">Min</span>
-                            <input value={minNote} onChange={(e) => setMinNote(e.target.value)} className="w-full bg-transparent text-center font-black text-xl text-brand-primary outline-none" />
-                        </div>
-                        <div className="bg-brand-bg/50 p-4 rounded-3xl border border-white shadow-inner">
-                            <span className="text-[10px] font-black text-gray-400 uppercase block text-center mb-1">Max</span>
-                            <input value={maxNote} onChange={(e) => setMaxNote(e.target.value)} className="w-full bg-transparent text-center font-black text-xl text-brand-primary outline-none" />
+                    <div className="space-y-3">
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block ml-1 text-center">Practice Mode</span>
+                        <div className="grid grid-cols-2 gap-2">
+                            {[
+                                { id: 'left', label: 'Left Hand' },
+                                { id: 'right', label: 'Right Hand' }
+                            ].map(({ id, label }) => (
+                                <label key={id} className={`flex items-center gap-2 p-2 rounded-xl transition-all border cursor-pointer ${
+                                    practicingHands.includes(id) ? 'bg-indigo-50 border-indigo-100' : 'bg-gray-50 border-transparent hover:bg-gray-100'
+                                }`}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={practicingHands.includes(id)} 
+                                        onChange={() => handleHandToggle(id)} 
+                                        className="w-4 h-4 accent-indigo-500 rounded shadow-sm" 
+                                    />
+                                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-tighter">{label}</span>
+                                </label>
+                            ))}
                         </div>
                     </div>
+
+                    {practicingHands.includes('right') && (
+                        <div className="space-y-3">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block ml-1 text-center">Treble Range</span>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-brand-bg/50 p-4 rounded-3xl border border-white shadow-inner">
+                                    <span className="text-[10px] font-black text-gray-400 uppercase block text-center mb-1">Min</span>
+                                    <input value={minNote} onChange={(e) => setMinNote(e.target.value)} className="w-full bg-transparent text-center font-black text-xl text-brand-primary outline-none" />
+                                </div>
+                                <div className="bg-brand-bg/50 p-4 rounded-3xl border border-white shadow-inner">
+                                    <span className="text-[10px] font-black text-gray-400 uppercase block text-center mb-1">Max</span>
+                                    <input value={maxNote} onChange={(e) => setMaxNote(e.target.value)} className="w-full bg-transparent text-center font-black text-xl text-brand-primary outline-none" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {practicingHands.includes('left') && (
+                        <div className="space-y-3">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block ml-1 text-center">Bass Range</span>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-brand-bg/50 p-4 rounded-3xl border border-white shadow-inner">
+                                    <span className="text-[10px] font-black text-gray-400 uppercase block text-center mb-1">Min</span>
+                                    <input value={bassMinNote} onChange={(e) => setBassMinNote(e.target.value)} className="w-full bg-transparent text-center font-black text-xl text-brand-primary outline-none" />
+                                </div>
+                                <div className="bg-brand-bg/50 p-4 rounded-3xl border border-white shadow-inner">
+                                    <span className="text-[10px] font-black text-gray-400 uppercase block text-center mb-1">Max</span>
+                                    <input value={bassMaxNote} onChange={(e) => setBassMaxNote(e.target.value)} className="w-full bg-transparent text-center font-black text-xl text-brand-primary outline-none" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="space-y-3">
                         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block ml-1 text-center">Note Types</span>

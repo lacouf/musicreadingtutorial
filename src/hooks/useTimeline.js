@@ -63,7 +63,14 @@ export function useTimeline(mode, selectedLessonId, settings, onTimelineLoaded) 
             setLessonContent(null);
             newMeta = { tempo: DEFAULT_TEMPO, beatsPerMeasure: 4 };
             
-            const { enabledDurations, minNote, maxNote, includeSharps } = settings;
+            const { 
+                enabledDurations, 
+                minNote, maxNote, 
+                bassMinNote, bassMaxNote,
+                practicingHands,
+                includeSharps 
+            } = settings;
+
             const possibleDurations = [];
             if (enabledDurations.whole) possibleDurations.push(4.0);
             if (enabledDurations.half) possibleDurations.push(2.0);
@@ -73,7 +80,15 @@ export function useTimeline(mode, selectedLessonId, settings, onTimelineLoaded) 
             
             if (possibleDurations.length === 0) possibleDurations.push(1.0);
 
-            rawTimeline = generateRandomTimeline(minNote, maxNote, 20, newMeta.tempo, includeSharps, possibleDurations);
+            rawTimeline = generateRandomTimeline({
+                trebleRange: { min: minNote, max: maxNote },
+                bassRange: { min: bassMinNote, max: bassMaxNote },
+                hands: practicingHands,
+                count: 20,
+                tempo: newMeta.tempo,
+                includeSharps,
+                possibleDurations
+            });
         }
 
         setLessonMeta(newMeta);
