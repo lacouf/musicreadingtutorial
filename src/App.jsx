@@ -125,6 +125,7 @@ export default function App() {
         hits,
         wrongNotes,
         misses,
+        activeNotes,
         resetMidiState
     } = useMidiSystem(
         timelineRef,
@@ -364,7 +365,7 @@ export default function App() {
 
                         {/* Scoring System Panel */}
                         <section className="flex-1 bg-white rounded-[3rem] shadow-2xl overflow-hidden border-[8px] border-white ring-1 ring-gray-200/50 min-h-[400px]">
-                            <ScoringPanel hits={hits} wrongNotes={wrongNotes} misses={misses} />
+                            <ScoringPanel hits={hits} wrongNotes={wrongNotes} misses={misses} activeNotes={activeNotes} />
                         </section>
                     </div>
 

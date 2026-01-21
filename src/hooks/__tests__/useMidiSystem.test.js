@@ -535,6 +535,88 @@ describe('useMidiSystem', () => {
     });
   });
 
+  describe('activeNotes Tracking', () => {
+    it('should track currently pressed notes', () => {
+      const { result } = renderHook(() =>
+        useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+      );
+
+      act(() => {
+        mockCallbacks.onNoteOn('C4', 60);
+      });
+
+      expect(result.current.activeNotes).toEqual([{ pitch: 'C4', note: 60 }]);
+
+      act(() => {
+        mockCallbacks.onNoteOn('E4', 64);
+      });
+
+      expect(result.current.activeNotes).toEqual([
+        { pitch: 'C4', note: 60 },
+        { pitch: 'E4', note: 64 }
+      ]);
+    });
+
+    it('should remove notes on noteOff', () => {
+      const { result } = renderHook(() =>
+        useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+      );
+
+      act(() => {
+        mockCallbacks.onNoteOn('C4', 60);
+        mockCallbacks.onNoteOn('E4', 64);
+      });
+
+      act(() => {
+        mockCallbacks.onNoteOff('C4', 60);
+      });
+
+      expect(result.current.activeNotes).toEqual([{ pitch: 'E4', note: 64 }]);
+
+      act(() => {
+        mockCallbacks.onNoteOff('E4', 64);
+      });
+
+      expect(result.current.activeNotes).toEqual([]);
+    });
+
+    it('should keep notes sorted by MIDI number', () => {
+      const { result } = renderHook(() =>
+        useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+      );
+
+      act(() => {
+        mockCallbacks.onNoteOn('E4', 64);
+        mockCallbacks.onNoteOn('C4', 60);
+        mockCallbacks.onNoteOn('G4', 67);
+      });
+
+      expect(result.current.activeNotes).toEqual([
+        { pitch: 'C4', note: 60 },
+        { pitch: 'E4', note: 64 },
+        { pitch: 'G4', note: 67 }
+      ]);
+    });
+
+    it('should clear activeNotes on resetMidiState', () => {
+      const { result } = renderHook(() =>
+        useMidiSystem(mockTimelineRef, mockScrollOffsetRef, mockLessonMeta, mockPausedRef, mockSettings)
+      );
+
+      act(() => {
+        mockCallbacks.onNoteOn('C4', 60);
+      });
+
+      expect(result.current.activeNotes.length).toBe(1);
+
+      act(() => {
+        result.current.resetMidiState();
+      });
+
+      expect(result.current.activeNotes).toEqual([]);
+    });
+  });
+
   describe('Exported Values', () => {
     it('should expose all required properties', () => {
       const { result } = renderHook(() =>
@@ -550,6 +632,7 @@ describe('useMidiSystem', () => {
       expect(result.current).toHaveProperty('hits');
       expect(result.current).toHaveProperty('wrongNotes');
       expect(result.current).toHaveProperty('misses');
+      expect(result.current).toHaveProperty('activeNotes');
       expect(result.current).toHaveProperty('resetMidiState');
     });
   });

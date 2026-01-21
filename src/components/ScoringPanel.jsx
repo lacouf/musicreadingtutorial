@@ -10,10 +10,12 @@ import PropTypes from 'prop-types';
  * @param {number} props.misses - The number of notes that scrolled past without attempt
  * @returns {JSX.Element} The rendered scoring panel.
  */
-const ScoringPanel = ({ hits = 0, wrongNotes = 0, misses = 0 }) => {
+const ScoringPanel = ({ hits = 0, wrongNotes = 0, misses = 0, activeNotes = [] }) => {
   const totalMisses = wrongNotes + misses;
   const total = hits + totalMisses;
   const accuracy = total > 0 ? Math.round((hits / total) * 100) : 0;
+
+  const displayNotes = activeNotes.slice(0, 3).map(n => n.pitch).join(', ');
 
   return (
     <div className="h-full flex flex-col items-center justify-center bg-gray-50/50 rounded-[2rem] border-2 border-dashed border-gray-100 m-2 p-6">
@@ -36,9 +38,14 @@ const ScoringPanel = ({ hits = 0, wrongNotes = 0, misses = 0 }) => {
         </div>
       </div>
 
-      <div className="flex flex-col items-center pt-4 border-t border-gray-100 w-full">
+      <div className="flex flex-col items-center pt-4 border-t border-gray-100 w-full mb-4">
         <span className="text-2xl font-black text-brand-primary">{accuracy}%</span>
         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Accuracy</span>
+      </div>
+
+      <div className="flex flex-col items-center pt-4 border-t border-gray-100 w-full">
+        <span className="text-xl font-black text-indigo-500 min-h-[1.75rem]">{displayNotes || '--'}</span>
+        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Active Keys</span>
       </div>
     </div>
   );
@@ -47,7 +54,11 @@ const ScoringPanel = ({ hits = 0, wrongNotes = 0, misses = 0 }) => {
 ScoringPanel.propTypes = {
   hits: PropTypes.number,
   wrongNotes: PropTypes.number,
-  misses: PropTypes.number
+  misses: PropTypes.number,
+  activeNotes: PropTypes.arrayOf(PropTypes.shape({
+    pitch: PropTypes.string,
+    note: PropTypes.number
+  }))
 };
 
 export default ScoringPanel;

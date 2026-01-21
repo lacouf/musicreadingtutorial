@@ -18,6 +18,7 @@ export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRe
     const [hits, setHits] = useState(0);
     const [wrongNotes, setWrongNotes] = useState(0);
     const [misses, setMisses] = useState(0);
+    const [activeNotes, setActiveNotes] = useState([]);
 
     // Logic State Refs
     const validatedNotesRef = useRef(new Map());
@@ -93,6 +94,14 @@ export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRe
             onNoteOn: (pitch, note) => {
                 const now = performance.now();
                 
+                // Track active notes for display
+                setActiveNotes(prev => {
+                    if (prev.find(n => n.note === note)) return prev;
+                    const next = [...prev, { pitch, note }];
+                    // Keep them sorted by MIDI note number
+                    return next.sort((a, b) => a.note - b.note);
+                });
+
                 // Debounce
                 const lastEventTime = recentMidiEventsRef.current.get(note);
                 if (lastEventTime && (now - lastEventTime) < 50) return;
@@ -139,6 +148,7 @@ export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRe
                 }
             },
             onNoteOff: (pitch, note) => {
+                setActiveNotes(prev => prev.filter(n => n.note !== note));
                 audioSynth.stopNote(note);
                 setLog(l => [...l, `noteOff ${pitch} (${note})`]);
 
@@ -179,6 +189,7 @@ export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRe
             attemptedIndicesRef.current.clear();
             missedIndicesRef.current.clear();
         }
+        setActiveNotes([]);
         validatedNotesRef.current.clear();
         recentMidiEventsRef.current.clear();
         activeMatchesRef.current.clear();
@@ -195,6 +206,7 @@ export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRe
         hits,
         wrongNotes,
         misses,
+        activeNotes,
         resetMidiState
     };
 }
