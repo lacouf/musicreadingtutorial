@@ -17,7 +17,7 @@ import { useTimeline } from './hooks/useTimeline';
 import { useMidiSystem } from './hooks/useMidiSystem';
 import { parsePitchToMidi } from './core/musicUtils';
 import { RENDERING, TIMING, MIDI } from './core/constants';
-import { calculateScrollSpeed } from './core/layoutUtils';
+import { calculateScrollSpeed, calculateNoteY } from './core/layoutUtils';
 
 const LEAD_IN_SECONDS = TIMING.LEAD_IN_SECONDS;
 
@@ -121,6 +121,7 @@ export default function App() {
         playheadFlash,
         pulseActive,
         pulseColor,
+        pulseMidi,
         hits,
         wrongNotes,
         misses,
@@ -218,6 +219,11 @@ export default function App() {
 
     const overlayWidth = 120;
     const circleSize = 18;
+    
+    // Calculate vertical position for the feedback dot
+    // If pulseMidi is available, map it to Y position on the staff
+    // Otherwise, center it (fallback, though pulseMidi should be set when pulseActive is true)
+    const dotY = (pulseMidi !== null && pulseMidi !== undefined) ? calculateNoteY(pulseMidi) : (viewportHeight / 2);
 
     return (
         <div className="flex h-screen w-full bg-brand-bg font-sans select-none text-gray-800 overflow-hidden">
@@ -333,14 +339,15 @@ export default function App() {
                                         width: overlayWidth,
                                         height: viewportHeight,
                                         pointerEvents: 'none',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
                                         zIndex: 10
                                     }}
                                 >
                                     <div
                                         style={{
+                                            position: 'absolute',
+                                            left: '50%',
+                                            top: dotY - (circleSize / 2), // Center the dot on the calculated Y
+                                            marginLeft: -(circleSize / 2), // Center horizontally in the overlay
                                             width: circleSize,
                                             height: circleSize,
                                             borderRadius: '50%',

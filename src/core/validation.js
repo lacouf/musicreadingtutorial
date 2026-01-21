@@ -53,7 +53,8 @@ export function validateNoteOn({
         return {
             result: 'extra',
             message: `❌ Extra/Misplaced: played ${note} at ${currentBeat.toFixed(2)}b`,
-            color: 'red'
+            color: 'red',
+            targetMidi: note
         };
     }
 
@@ -71,6 +72,7 @@ export function validateNoteOn({
             message: `✅ Correct: ${key} (dt=${diffBeats.toFixed(2)} beats)`,
             color: 'green',
             matchedIndex: exact.index,
+            targetMidi: exact.ev.midi,
             matchData: {
                 index: exact.index,
                 startBeat: currentBeat,
@@ -85,7 +87,8 @@ export function validateNoteOn({
             result: 'wrong',
             message: `❌ Wrong: played ${note}, expected ${expectedKey} (dt=${diffBeats.toFixed(2)} beats)`,
             color: 'red',
-            nearestIndex: nearest.index
+            nearestIndex: nearest.index,
+            targetMidi: note
         };
     }
 }

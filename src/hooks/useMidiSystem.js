@@ -12,6 +12,7 @@ export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRe
     const [playheadFlash, setPlayheadFlash] = useState(null);
     const [pulseActive, setPulseActive] = useState(false);
     const [pulseColor, setPulseColor] = useState('red');
+    const [pulseMidi, setPulseMidi] = useState(null);
 
     // Scoring State
     const [hits, setHits] = useState(0);
@@ -28,13 +29,15 @@ export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRe
 
     const { beatTolerance, validateNoteLength } = settings;
 
-    function flashPlayhead(color) {
+    function flashPlayhead(color, midi = null) {
         setPlayheadFlash(color);
         setPulseColor(color || 'red');
+        setPulseMidi(midi);
         setPulseActive(true);
         window.setTimeout(() => {
             setPlayheadFlash(null);
             setPulseActive(false);
+            // We don't clear pulseMidi immediately to avoid it jumping back during fade out
         }, 220);
     }
 
@@ -114,7 +117,7 @@ export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRe
                 });
 
                 if (validation.message) setLog(l => [...l, validation.message]);
-                if (validation.color) flashPlayhead(validation.color);
+                if (validation.color) flashPlayhead(validation.color, validation.targetMidi);
 
                 if (validation.result === 'correct') {
                     // Correct hit - increment hits and mark as attempted
@@ -188,6 +191,7 @@ export function useMidiSystem(timelineRef, scrollOffsetRef, lessonMeta, pausedRe
         playheadFlash,
         pulseActive,
         pulseColor,
+        pulseMidi,
         hits,
         wrongNotes,
         misses,

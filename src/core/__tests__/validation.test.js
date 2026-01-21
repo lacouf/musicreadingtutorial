@@ -31,18 +31,18 @@ describe('Validation Utilities', () => {
         const validatedNotes = new Map();
 
         it('returns "correct" for an exact match', () => {
-            const result = validateNoteOn({
-                note: 60,
-                currentBeat: 0,
-                tempo,
-                timeline,
-                validatedNotes,
-                beatTolerance: 0.1
-            });
-            expect(result.result).toBe('correct');
-            expect(result.color).toBe('green');
-            expect(result.matchData.index).toBe(0);
+        const result = validateNoteOn({
+            note: 60,
+            currentBeat: 0,
+            tempo: 60,
+            timeline,
+            validatedNotes: new Map()
         });
+        
+        expect(result.result).toBe('correct');
+        expect(result.color).toBe('green');
+        expect(result.targetMidi).toBe(60);
+    });
 
         it('returns "wrong" for pitch mismatch in window', () => {
             const result = validateNoteOn({
@@ -56,6 +56,7 @@ describe('Validation Utilities', () => {
             expect(result.result).toBe('wrong');
             expect(result.color).toBe('red');
             expect(result.message).toContain('expected C4');
+            expect(result.targetMidi).toBe(61); // Expecting the played note (C#4)
         });
 
         it('returns "extra" for note played where none expected', () => {

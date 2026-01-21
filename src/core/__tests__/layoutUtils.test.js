@@ -1,10 +1,59 @@
 
 import { describe, it, expect } from 'vitest';
-import { calculateNoteX, calculateScrollSpeed } from '../layoutUtils';
+import { calculateNoteX, calculateScrollSpeed, calculateNoteY } from '../layoutUtils';
+import { RENDERING } from '../constants';
 
 describe('Layout Utils', () => {
     const PIXELS_PER_BEAT = 100;
     const MARGIN_LEFT = 20;
+
+    describe('calculateNoteY', () => {
+        // RENDERING.TREBLE_Y = 80
+        // RENDERING.BASS_Y = 220
+        // Treble Base: F5 (77) -> Y=80
+        // Bass Base: A3 (57) -> Y=220
+        // Step size: 5px
+        // Correction Offset: +35px
+
+        it('calculates Y for Treble reference note (F5)', () => {
+            expect(calculateNoteY(77)).toBe(RENDERING.TREBLE_Y + 35);
+        });
+
+        it('calculates Y for note below reference (E5)', () => {
+            // F5(77) -> E5(76) is 1 diatonic step down
+            // Y increases by 5, plus 35 offset
+            expect(calculateNoteY(76)).toBe(RENDERING.TREBLE_Y + 5 + 35);
+        });
+
+        it('calculates Y for Middle C (C4) on Treble Stave', () => {
+            // C4 (60) is treated as Treble
+            // F5 to C4 is 10 steps down
+            // Y = 80 + 50 + 35 = 165
+            expect(calculateNoteY(60)).toBe(RENDERING.TREBLE_Y + 50 + 35);
+        });
+
+        it('calculates Y for Bass reference note (A3)', () => {
+            expect(calculateNoteY(57)).toBe(RENDERING.BASS_Y + 35);
+        });
+
+        it('calculates Y for note above Bass reference (B3)', () => {
+            // B3 (59) is Bass (< 60)
+            // A3 to B3 is 1 step up
+            // Y decreases by 5, plus 35 offset
+            expect(calculateNoteY(59)).toBe(RENDERING.BASS_Y - 5 + 35);
+        });
+
+        it('calculates Y for C3 on Bass Stave', () => {
+            // A3 (57) to C3 (48)
+            // A, G, F, E, D, C -> 5 steps down
+            // Y = 220 + 25 + 35 = 280
+            expect(calculateNoteY(48)).toBe(RENDERING.BASS_Y + 25 + 35);
+        });
+        
+        it('falls back to Treble Y for null', () => {
+            expect(calculateNoteY(null)).toBe(RENDERING.TREBLE_Y + 35);
+        });
+    });
 
     describe('calculateNoteX', () => {
         it('calculates X based on measure and beat (4/4 time)', () => {
